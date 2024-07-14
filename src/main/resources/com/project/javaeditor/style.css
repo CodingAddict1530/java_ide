@@ -1,0 +1,11 @@
+.close-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0.2em;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+}
+
+.close-button:hover {
+    -fx-text-fill: red;
+}
