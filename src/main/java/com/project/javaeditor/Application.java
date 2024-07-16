@@ -12,6 +12,7 @@ public class Application extends javafx.application.Application {
 
     @Override
     public void start(Stage stage) throws IOException {
+
         FXMLLoader fxmlLoader = new FXMLLoader(Application.class.getResource("editor.fxml"));
         Parent root = fxmlLoader.load();
         Scene scene = new Scene(root, 1000, 600);
@@ -22,6 +23,7 @@ public class Application extends javafx.application.Application {
     }
 
     public static void main(String[] args) {
+
         launch();
     }
 }
