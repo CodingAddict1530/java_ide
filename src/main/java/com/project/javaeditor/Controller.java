@@ -20,7 +20,6 @@ import org.fxmisc.richtext.LineNumberFactory;
 import java.io.*;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.ResourceBundle;
 import java.util.function.IntFunction;
@@ -326,6 +325,17 @@ public class Controller implements Initializable {
                     }
                     color(textArea);
                     break;
+                case "*":
+                    event.consume();
+                    if (!textArea.getText().isEmpty() &&
+                            textArea.getText().charAt(textArea.getCaretPosition() - 1) == '/') {
+                        textArea.replaceText(caretPosition, caretPosition, "**/");
+                        textArea.moveTo(caretPosition + 1);
+                    } else {
+                        textArea.replaceText(caretPosition, caretPosition, "*");
+                    }
+                    color(textArea);
+                    break;
             }
 
         });
@@ -358,6 +368,13 @@ public class Controller implements Initializable {
                     textArea.moveTo(textArea.getCaretPosition() - moveCaret);
                     moveCaret = 0;
                 }
+                if (textArea.getText().length() > 2 &&
+                        textArea.getText().charAt(textArea.getCaretPosition() - 2) == '*' &&
+                        textArea.getText().charAt(textArea.getCaretPosition()) == '*') {
+                    textArea.replaceText(textArea.getCaretPosition(), textArea.getCaretPosition(), "\n ");
+                    textArea.moveTo(textArea.getCaretPosition() - 2);
+                    textArea.replaceText(textArea.getCaretPosition(), textArea.getCaretPosition(), " * ");
+                }
             }
 
         });
@@ -378,22 +395,56 @@ public class Controller implements Initializable {
 
     public void color(InlineCssTextArea textArea) {
         String line = textArea.getText();
+        ArrayList<String> lineArray1 = new ArrayList<>();
+
+        Pattern pattern = Pattern.compile("(//[^\\n]*)");
+
+        // Create a matcher for the input text
+        Matcher matcher = pattern.matcher(line);
+
+        // Find all matches
+        while (matcher.find()) {
+            // Get the matched text excluding "//"
+            String match = matcher.group(1);
+            lineArray1.add(match);
+        }
+        for (String word: lineArray1) {
+            colorThis(textArea, "grey", word);
+            line = line.replace(word, "");
+        }
+
+        lineArray1 = new ArrayList<>();
+        pattern = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
+
+        // Create a matcher for the input text
+        matcher = pattern.matcher(line);
+
+        // Find all matches
+        while (matcher.find()) {
+            // Get the matched text including "/*" and "*/"
+            String match = matcher.group();
+            lineArray1.add(match);
+        }
+        for (String word: lineArray1) {
+            colorThis(textArea, "green", word);
+            line = line.replace(word, "");
+        }
 
         // Split with space, don't include space characters like \n, \t etc.
-        String[] lineArray = line.split("\\s+");
-        for (String word: lineArray) {
+        String[] lineArray2 = line.split("\\s+");
+        for (String word: lineArray2) {
             if (ORANGE_KEY_WORDS.contains(word)) {
-                colorThis(textArea, "red", word, line);
+                colorThis(textArea, "red", word);
             } else {
-                colorThis(textArea, "black", word, line);
+                colorThis(textArea, "black", word);
             }
         }
     }
 
-    public void colorThis(InlineCssTextArea textArea, String color, String word, String line) {
+    public void colorThis(InlineCssTextArea textArea, String color, String word) {
 
         Pattern pattern = Pattern.compile("(?<!\\w)" + Pattern.quote(word) + "(?!\\w)");
-        Matcher matcher = pattern.matcher(line);
+        Matcher matcher = pattern.matcher(textArea.getText());
 
         while (matcher.find()) {
             int start = matcher.start();
