@@ -13,10 +13,14 @@ import javafx.scene.layout.HBox;
 
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import org.fxmisc.richtext.InlineCssTextArea;
 import org.fxmisc.richtext.LineNumberFactory;
 
+import java.io.*;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.ResourceBundle;
 import java.util.function.IntFunction;
@@ -46,11 +50,15 @@ public class Controller implements Initializable {
 
     private int moveCaret = 0;
 
+    private final ArrayList<Tab> tabs = new ArrayList<>();
+    private final ArrayList<String> filePaths = new ArrayList<>();
+    private final ArrayList<Boolean> saved = new ArrayList<>();
+
     @FXML
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
-        newFile(tabPane);
+        newFile(tabPane, null, null);
 
         addAccelerator(newFile, KeyCode.N, KeyCodeCombination.CONTROL_DOWN);
         addAccelerator(openFile, KeyCode.O, KeyCodeCombination.CONTROL_DOWN);
@@ -65,15 +73,19 @@ public class Controller implements Initializable {
     @FXML
     public void newFile() {
 
-        newFile(tabPane);
+        newFile(tabPane, null, null);
     }
 
-    public void newFile(TabPane tabPane) {
+    public void newFile(TabPane tabPane, String path, String text) {
 
         Tab newTab = new Tab();
+        tabs.add(newTab);
+        filePaths.add(path);
+        saved.add(path != null);
         HBox header = new HBox();
         header.setAlignment(javafx.geometry.Pos.CENTER);
-        Label headerLabel = new Label("Untitled.java     ");
+        Label headerLabel = new Label((path == null) ? "* Untitled.java     " :
+                new File(path).getName() + "     ");
         Button closeBtn = new Button("x");
         closeBtn.getStyleClass().add("close-button");
         closeBtn.setOnAction(event -> {
@@ -97,7 +109,9 @@ public class Controller implements Initializable {
         };
 
         textArea.setParagraphGraphicFactory(customLineNumberFactory);
-        addEventHandlers(textArea);
+        addEventHandlers(textArea, newTab);
+        textArea.replaceText((text == null) ? "" : text);
+        color(textArea);
 
         newTab.setContent(textArea);
         tabPane.getTabs().add(newTab);
@@ -116,8 +130,82 @@ public class Controller implements Initializable {
 
         Tab selectedTab = tabPane.getSelectionModel().getSelectedItem();
         if (selectedTab != null) {
+            saved.remove(tabs.indexOf(selectedTab));
+            filePaths.remove(tabs.indexOf(selectedTab));
+            tabs.remove(selectedTab);
             tabPane.getTabs().remove(selectedTab);
         }
+    }
+
+    @FXML
+    public void saveFile() {
+
+        saveFile(tabPane);
+    }
+
+    public void saveFile(TabPane tabPane) {
+
+        Tab tab = tabPane.getSelectionModel().getSelectedItem();
+        if (tab == null) {
+            return;
+        }
+        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
+        File file;
+        if (tabs.contains(tab) && filePaths.get(tabs.indexOf(tab)) != null) {
+            file = new File(filePaths.get(tabs.indexOf(tab)));
+        } else {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Save File");
+            fileChooser.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("Java files", "*.java"),
+                    new FileChooser.ExtensionFilter("All files", "*.*")
+            );
+            file = fileChooser.showSaveDialog(tabPane.getScene().getWindow());
+        }
+        if (file != null) {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                writer.write(textArea.getText());
+                filePaths.set(tabs.indexOf(tab), file.getPath());
+                saved.set(tabs.indexOf(tab), true);
+                String fileName = file.getName();
+                HBox header = (HBox) tab.getGraphic();
+                header.getChildren().remove(0);
+                header.getChildren().add(0, new Label(fileName + "     "));
+            } catch (IOException e) {
+                System.out.println(e.getMessage());;
+            }
+        }
+    }
+
+    @FXML
+    public void openFile() {
+
+        openFile(tabPane);
+    }
+
+    public void openFile(TabPane tabPane) {
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open File");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Java files", "*.java"),
+                new FileChooser.ExtensionFilter("All files", "*.*")
+        );
+        File file = fileChooser.showOpenDialog(tabPane.getScene().getWindow());
+
+        StringBuilder text = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                text.append(line);
+                text.append("\n");
+            }
+        } catch (IOException e) {
+            System.out.println(e.getMessage());;
+        }
+
+        newFile(tabPane, file.getPath(), text.toString());
+
     }
 
     public String textHandler(InlineCssTextArea textArea) {
@@ -201,7 +289,7 @@ public class Controller implements Initializable {
 
     }
 
-    public void addEventHandlers(InlineCssTextArea textArea) {
+    public void addEventHandlers(InlineCssTextArea textArea, Tab tab) {
 
         textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
@@ -226,6 +314,7 @@ public class Controller implements Initializable {
                     } else {
                         textArea.replaceSelection(String.format("{%s}", textArea.getSelectedText()));
                     }
+                    color(textArea);
                     break;
                 case "[":
                     event.consume();
@@ -235,6 +324,7 @@ public class Controller implements Initializable {
                     } else {
                         textArea.replaceSelection(String.format("[%s]", textArea.getSelectedText()));
                     }
+                    color(textArea);
                     break;
             }
 
@@ -273,6 +363,13 @@ public class Controller implements Initializable {
         });
         textArea.setOnKeyTyped(event -> {
 
+            if (Character.isLetterOrDigit(event.getCharacter().charAt(0)) && saved.get(tabs.indexOf(tab))) {
+                saved.set(tabs.indexOf(tab), false);
+                HBox header = (HBox) tab.getGraphic();
+                header.getChildren().remove(0);
+                header.getChildren().add(0, new Label("* " +
+                        new File(filePaths.get(tabs.indexOf(tab))).getName() + "     "));
+            }
             color(textArea);
 
         });
@@ -281,7 +378,9 @@ public class Controller implements Initializable {
 
     public void color(InlineCssTextArea textArea) {
         String line = textArea.getText();
-        String[] lineArray = line.split(" ");
+
+        // Split with space, don't include space characters like \n, \t etc.
+        String[] lineArray = line.split("\\s+");
         for (String word: lineArray) {
             if (ORANGE_KEY_WORDS.contains(word)) {
                 colorThis(textArea, "red", word, line);
