@@ -7,6 +7,7 @@ import javafx.scene.control.TextArea;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import org.fxmisc.richtext.InlineCssTextArea;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -70,9 +71,9 @@ public class ControllerTest {
     @Order(4)
     public void testGetLine(String string, int index, String expectedString) {
 
-        TextArea textArea = new TextArea();
-        textArea.setText(string);
-        textArea.positionCaret(index);
+        InlineCssTextArea textArea = new InlineCssTextArea();
+        textArea.replaceText(string);
+        textArea.moveTo(index);
         String line = controller.getLine(textArea);
         assertEquals(expectedString, line);
 

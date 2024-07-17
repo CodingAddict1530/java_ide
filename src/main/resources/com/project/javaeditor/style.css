@@ -1,3 +1,8 @@
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../../../fonts/JetBrainsMono-VariableFont_wght.ttf');
+}
+
 .close-button {
     -fx-background-color: transparent;
     -fx-padding: 0.2em;
@@ -9,3 +14,10 @@
 .close-button:hover {
     -fx-text-fill: red;
 }
+
+.inline-css-text-area {
+    -fx-padding: 1em;
+    -fx-font-size: 1.3em;
+    -fx-font-family: 'JetBrains Mono';
+}
+

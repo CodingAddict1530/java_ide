@@ -42,6 +42,7 @@ dependencies {
     implementation('net.synedra:validatorfx:0.4.0') {
         exclude(group: 'org.openjfx')
     }
+    implementation group: 'org.fxmisc.richtext', name: 'richtextfx', version: '0.11.3'
     implementation('org.kordamp.ikonli:ikonli-javafx:12.3.1')
     implementation('org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0')
     implementation('eu.hansolo:tilesfx:11.48') {

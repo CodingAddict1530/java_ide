@@ -3,6 +3,7 @@ module com.project.javaeditor {
     requires javafx.fxml;
     requires javafx.web;
     requires javafx.swing;
+    requires org.fxmisc.richtext;
 
     requires org.controlsfx.controls;
     requires com.dlsc.formsfx;

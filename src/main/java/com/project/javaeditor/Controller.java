@@ -2,14 +2,28 @@ package com.project.javaeditor;
 
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import org.fxmisc.richtext.InlineCssTextArea;
+import org.fxmisc.richtext.LineNumberFactory;
+
 import java.net.URL;
+import java.util.Objects;
 import java.util.ResourceBundle;
+import java.util.function.IntFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static utility.Utility.ORANGE_KEY_WORDS;
 
 public class Controller implements Initializable {
 
@@ -68,7 +82,21 @@ public class Controller implements Initializable {
         header.getChildren().addAll(headerLabel, closeBtn);
         newTab.setGraphic(header);
 
-        TextArea textArea = new TextArea();
+        InlineCssTextArea textArea = new InlineCssTextArea();
+        textArea.getStyleClass().add("inline-css-text-area");
+
+        IntFunction<Node> lineNumberFactory = LineNumberFactory.get(textArea);
+        IntFunction<Node> customLineNumberFactory = line -> {
+            Node node = lineNumberFactory.apply(line);
+            if (node instanceof Label label) {
+                label.setFont(Font.font("Roboto", FontWeight.BOLD, 13));
+                label.setAlignment(Pos.CENTER_RIGHT);
+                label.setStyle("-fx-padding: 0 5 0 0; -fx-background-color: white;");
+            }
+            return node;
+        };
+
+        textArea.setParagraphGraphicFactory(customLineNumberFactory);
         addEventHandlers(textArea);
 
         newTab.setContent(textArea);
@@ -92,21 +120,21 @@ public class Controller implements Initializable {
         }
     }
 
-    public String textHandler(TextArea textArea) {
+    public String textHandler(InlineCssTextArea textArea) {
 
         String line = getLine(textArea);
         int caretPosition = textArea.getCaretPosition();
         String text = textArea.getText();
-        char caretLeft = caretPosition > 0 ? text.charAt(caretPosition - 2) : '\u0000';
+        char caretLeft = caretPosition > 1 ? text.charAt(caretPosition - 2) : '\u0000';
         char caretRight = caretPosition < text.length() ? text.charAt(caretPosition) : '\u0000';
         return applyIndent(line, caretLeft, caretRight);
 
     }
 
-    public String getLine(TextArea textArea) {
+    public String getLine(InlineCssTextArea textArea) {
 
         int caretPosition = textArea.getCaretPosition();
-        int start = caretPosition - 1;
+        int start = (caretPosition == 0) ? 0 : caretPosition - 1;
         while (start > 0 && textArea.getText().charAt(start - 1) != '\n') {
             start--;
         }
@@ -156,8 +184,6 @@ public class Controller implements Initializable {
             indent.append('\t');
         }
 
-
-
         if ((caretLeft == '(' && caretRight == ')') || (caretLeft == '{' && caretRight == '}')
                 || (caretLeft == '[' && caretRight == ']')) {
             indent.append('\n');
@@ -175,48 +201,106 @@ public class Controller implements Initializable {
 
     }
 
-    public void addEventHandlers(TextArea textArea) {
+    public void addEventHandlers(InlineCssTextArea textArea) {
 
-        textArea.setOnKeyTyped(event -> {
+        textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
             int caretPosition = textArea.getCaretPosition();
-            event.consume();
             switch (event.getCharacter()) {
                 case "(":
-                    textArea.replaceText(caretPosition, caretPosition, ")");
-                    textArea.positionCaret(caretPosition);
+                    event.consume();
+                    if (textArea.getSelectedText().isEmpty()) {
+                        textArea.replaceText(caretPosition, caretPosition, "()");
+                        textArea.moveTo(caretPosition + 1);
+                    } else {
+                        System.out.println("LOL");
+                        textArea.replaceSelection(String.format("(%s)", textArea.getSelectedText()));
+                    }
+                    color(textArea);
                     break;
                 case "{":
-                    textArea.replaceText(caretPosition, caretPosition, "}");
-                    textArea.positionCaret(caretPosition);
+                    event.consume();
+                    if (textArea.getSelectedText().isEmpty()) {
+                        textArea.replaceText(caretPosition, caretPosition, "{}");
+                        textArea.moveTo(caretPosition + 1);
+                    } else {
+                        textArea.replaceSelection(String.format("{%s}", textArea.getSelectedText()));
+                    }
                     break;
                 case "[":
-                    textArea.replaceText(caretPosition, caretPosition, "]");
-                    textArea.positionCaret(caretPosition);
-                    break;
-            }
-        });
-        textArea.setOnKeyPressed(event -> {
-
-            int caretPosition = textArea.getCaretPosition();
-            switch (event.getCode()) {
-                case TAB:
                     event.consume();
-                    textArea.replaceText(caretPosition, caretPosition, "\t");
-                    textArea.positionCaret(caretPosition + 1);
-                    break;
-
-                case ENTER:
-                    event.consume();
-                    textArea.insertText(caretPosition, textHandler(textArea));
-                    if (moveCaret != 0) {
-                        textArea.positionCaret(textArea.getCaretPosition() - moveCaret);
-                        moveCaret = 0;
+                    if (textArea.getSelectedText().isEmpty()) {
+                        textArea.replaceText(caretPosition, caretPosition, "[]");
+                        textArea.moveTo(caretPosition + 1);
+                    } else {
+                        textArea.replaceSelection(String.format("[%s]", textArea.getSelectedText()));
                     }
                     break;
             }
 
         });
+        textArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+
+            int caretPosition = textArea.getCaretPosition();
+            switch (event.getCode()) {
+                case TAB:
+                    textArea.replaceText(caretPosition, caretPosition, "\t");
+                    textArea.moveTo(caretPosition + 1);
+                    break;
+                case BACK_SPACE:
+                    String text = textArea.getText();
+                    char caretLeft = caretPosition > 0 ? text.charAt(caretPosition - 1) : '\u0000';
+                    char caretRight = caretPosition < text.length() ? text.charAt(caretPosition) : '\u0000';
+                    if ((caretLeft == '(' && caretRight == ')') || (caretLeft == '{' && caretRight == '}') ||
+                            (caretLeft == '[' && caretRight == ']')) {
+                        textArea.replaceText(caretPosition, caretPosition + 1, "");
+                    }
+                    break;
+
+            }
+        });
+        textArea.setOnKeyPressed(event -> {
+
+            int caretPosition = textArea.getCaretPosition();
+            if (Objects.requireNonNull(event.getCode()) == KeyCode.ENTER) {
+                textArea.insertText(caretPosition, textHandler(textArea));
+                if (moveCaret != 0) {
+                    textArea.moveTo(textArea.getCaretPosition() - moveCaret);
+                    moveCaret = 0;
+                }
+            }
+
+        });
+        textArea.setOnKeyTyped(event -> {
+
+            color(textArea);
+
+        });
+
+    }
+
+    public void color(InlineCssTextArea textArea) {
+        String line = textArea.getText();
+        String[] lineArray = line.split(" ");
+        for (String word: lineArray) {
+            if (ORANGE_KEY_WORDS.contains(word)) {
+                colorThis(textArea, "red", word, line);
+            } else {
+                colorThis(textArea, "black", word, line);
+            }
+        }
+    }
+
+    public void colorThis(InlineCssTextArea textArea, String color, String word, String line) {
+
+        Pattern pattern = Pattern.compile("(?<!\\w)" + Pattern.quote(word) + "(?!\\w)");
+        Matcher matcher = pattern.matcher(line);
+
+        while (matcher.find()) {
+            int start = matcher.start();
+            int end = matcher.end();
+            textArea.setStyle(start, end, "-fx-fill: " + color + ";");
+        }
 
     }
 
