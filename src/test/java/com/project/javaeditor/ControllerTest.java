@@ -1,21 +1,21 @@
 package com.project.javaeditor;
 
 import javafx.embed.swing.JFXPanel;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.TabPane;
-import javafx.scene.control.TextArea;
+import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.layout.HBox;
 import org.fxmisc.richtext.InlineCssTextArea;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.File;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class ControllerTest {
@@ -35,24 +35,36 @@ public class ControllerTest {
     void tearDown() {
     }
 
-    @Test
+    @ParameterizedTest
+    @MethodSource("testAddAcceleratorProvider")
     @Order(1)
-    public void testAddAccelerator() {
+    public void testAddAccelerator(MenuItem menuItem, KeyCode keyCode) {
 
-        MenuItem menuItem = new MenuItem();
-        controller.addAccelerator(menuItem, KeyCode.N, KeyCodeCombination.CONTROL_DOWN);
+        controller.addAccelerator(menuItem, keyCode);
         KeyCombination keyComb = menuItem.getAccelerator();
-        assertEquals(new KeyCodeCombination(KeyCode.N, KeyCodeCombination.CONTROL_DOWN), keyComb);
+        assertEquals(new KeyCodeCombination(keyCode, KeyCombination.CONTROL_DOWN), keyComb);
 
     }
 
-    @RepeatedTest(5)
+    @ParameterizedTest
+    @MethodSource("testNewFileProvider")
     @Order(2)
-    public void testNewFile() {
+    public void testNewFile(String path, String text) {
 
         int tabCount = tabPane.getTabs().size();
-        controller.newFile(tabPane);
+        controller.newFile(tabPane, path, text, true);
         assertEquals(tabCount + 1, tabPane.getTabs().size());
+        Tab tab = tabPane.getTabs().get(tabPane.getTabs().size() - 1);
+        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
+        assertEquals((text == null) ? "" : text, textArea.getText());
+        HBox header = (HBox) tab.getGraphic();
+        Label label = (Label) header.getChildren().get(0);
+        if (path != null) {
+            File file = new File(path);
+            assertEquals(file.getName() + "     ", label.getText());
+        } else {
+            assertEquals("* Untitled.java     ",label.getText());
+        }
 
     }
 
@@ -61,7 +73,7 @@ public class ControllerTest {
     public void testCloseFile() {
 
         int tabCount = tabPane.getTabs().size();
-        controller.closeFile(tabPane);
+        controller.closeFile(tabPane, null);
         assertEquals((tabCount == 0) ? 0 : tabCount - 1, tabPane.getTabs().size());
 
     }
@@ -81,10 +93,31 @@ public class ControllerTest {
 
     @ParameterizedTest
     @MethodSource("testApplyIndentProvider")
-    @Order(4)
+    @Order(5)
     public void testApplyIndent(String line, String expectedLine, char charLeft, char charRight) {
         line = controller.applyIndent(line, charLeft, charRight);
         assertEquals(expectedLine, line);
+    }
+
+    public static Stream<Arguments> testAddAcceleratorProvider() {
+
+        return Stream.of(
+                Arguments.of(new MenuItem(), KeyCode.N),
+                Arguments.of(new MenuItem(), KeyCode.O),
+                Arguments.of(new MenuItem(), KeyCode.S),
+                Arguments.of(new MenuItem(), KeyCode.Q),
+                Arguments.of(new MenuItem(), KeyCode.X),
+                Arguments.of(new MenuItem(), KeyCode.C),
+                Arguments.of(new MenuItem(), KeyCode.V)
+        );
+    }
+
+    public static Stream<Arguments> testNewFileProvider() {
+
+        return Stream.of(
+                Arguments.of("\"C:\\Users\\hp\\OneDrive\\Desktop\\hey.java\"", "public static void{\n\t\n}"),
+                Arguments.of(null, null)
+        );
     }
 
     public static Stream<Arguments> testGetLineProvider() {
