@@ -5,23 +5,29 @@ import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyEvent;
+import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
 
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import org.fxmisc.richtext.InlineCssTextArea;
 import org.fxmisc.richtext.LineNumberFactory;
+import utility.*;
 
-import java.io.*;
+import java.io.File;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.FileReader;
+import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Objects;
-import java.util.ResourceBundle;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.*;
 import java.util.function.IntFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,36 +52,46 @@ public class Controller implements Initializable {
     private MenuItem copy;
     @FXML
     private MenuItem paste;
+    @FXML
+    private MenuItem openProject;
+    @FXML
+    private VBox projectView;
+    @FXML
+    private SplitPane splitPane;
 
     private int moveCaret = 0;
 
     private final ArrayList<Tab> tabs = new ArrayList<>();
     private final ArrayList<String> filePaths = new ArrayList<>();
     private final ArrayList<Boolean> saved = new ArrayList<>();
+    private final FileChooser fileChooser = new FileChooser();
 
     @FXML
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
-        newFile(tabPane, null, null);
+        newFile(tabPane, null, null, true);
 
-        addAccelerator(newFile, KeyCode.N, KeyCodeCombination.CONTROL_DOWN);
-        addAccelerator(openFile, KeyCode.O, KeyCodeCombination.CONTROL_DOWN);
-        addAccelerator(saveFile, KeyCode.S, KeyCodeCombination.CONTROL_DOWN);
-        addAccelerator(closeFile, KeyCode.Q, KeyCodeCombination.CONTROL_DOWN);
-        addAccelerator(cut, KeyCode.X, KeyCodeCombination.CONTROL_DOWN);
-        addAccelerator(copy, KeyCode.C, KeyCodeCombination.CONTROL_DOWN);
-        addAccelerator(paste, KeyCode.V, KeyCodeCombination.CONTROL_DOWN);
+        addAccelerator(newFile, KeyCode.N);
+        addAccelerator(openFile, KeyCode.O);
+        addAccelerator(saveFile, KeyCode.S);
+        addAccelerator(closeFile, KeyCode.Q);
+        addAccelerator(cut, KeyCode.X);
+        addAccelerator(copy, KeyCode.C);
+        addAccelerator(paste, KeyCode.V);
+        addAccelerator(openProject, KeyCode.P);
+
+        splitPane.setDividerPositions(0.3);
 
     }
 
     @FXML
     public void newFile() {
 
-        newFile(tabPane, null, null);
+        newFile(tabPane, null, null, true);
     }
 
-    public void newFile(TabPane tabPane, String path, String text) {
+    public void newFile(TabPane tabPane, String path, String text, boolean isColored) {
 
         Tab newTab = new Tab();
         tabs.add(newTab);
@@ -87,9 +103,7 @@ public class Controller implements Initializable {
                 new File(path).getName() + "     ");
         Button closeBtn = new Button("x");
         closeBtn.getStyleClass().add("close-button");
-        closeBtn.setOnAction(event -> {
-            tabPane.getTabs().remove(newTab);
-        });
+        closeBtn.setOnAction(event -> closeFile(tabPane, newTab));
         header.getChildren().addAll(headerLabel, closeBtn);
         newTab.setGraphic(header);
 
@@ -108,7 +122,9 @@ public class Controller implements Initializable {
         };
 
         textArea.setParagraphGraphicFactory(customLineNumberFactory);
-        addEventHandlers(textArea, newTab);
+        if (isColored) {
+            addEventHandlers(textArea, newTab);
+        }
         textArea.replaceText((text == null) ? "" : text);
         color(textArea);
 
@@ -122,17 +138,19 @@ public class Controller implements Initializable {
     @FXML
     public void closeFile() {
 
-        closeFile(tabPane);
+        closeFile(tabPane, null);
     }
 
-    public void closeFile(TabPane tabPane) {
+    public void closeFile(TabPane tabPane, Tab tab) {
 
-        Tab selectedTab = tabPane.getSelectionModel().getSelectedItem();
-        if (selectedTab != null) {
-            saved.remove(tabs.indexOf(selectedTab));
-            filePaths.remove(tabs.indexOf(selectedTab));
-            tabs.remove(selectedTab);
-            tabPane.getTabs().remove(selectedTab);
+        if (tab == null) {
+            tab = tabPane.getSelectionModel().getSelectedItem();
+        }
+        if (tab != null) {
+            saved.remove(tabs.indexOf(tab));
+            filePaths.remove(tabs.indexOf(tab));
+            tabs.remove(tab);
+            tabPane.getTabs().remove(tab);
         }
     }
 
@@ -148,16 +166,16 @@ public class Controller implements Initializable {
         if (tab == null) {
             return;
         }
+
         InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
         File file;
         if (tabs.contains(tab) && filePaths.get(tabs.indexOf(tab)) != null) {
             file = new File(filePaths.get(tabs.indexOf(tab)));
         } else {
-            FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Save File");
+            fileChooser.getExtensionFilters().removeAll();
             fileChooser.getExtensionFilters().addAll(
-                    new FileChooser.ExtensionFilter("Java files", "*.java"),
-                    new FileChooser.ExtensionFilter("All files", "*.*")
+                    new FileChooser.ExtensionFilter("Java files", "*.java")
             );
             file = fileChooser.showSaveDialog(tabPane.getScene().getWindow());
         }
@@ -171,26 +189,49 @@ public class Controller implements Initializable {
                 header.getChildren().remove(0);
                 header.getChildren().add(0, new Label(fileName + "     "));
             } catch (IOException e) {
-                System.out.println(e.getMessage());;
+                System.out.println(e.getMessage());
             }
+        } else {
+            System.out.println("No File Selected");
         }
     }
 
     @FXML
     public void openFile() {
 
-        openFile(tabPane);
+        openFile(tabPane, null);
     }
 
-    public void openFile(TabPane tabPane) {
+    public void openFile(TabPane tabPane, Path path) {
 
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Open File");
-        fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Java files", "*.java"),
-                new FileChooser.ExtensionFilter("All files", "*.*")
-        );
-        File file = fileChooser.showOpenDialog(tabPane.getScene().getWindow());
+        File file;
+        if (path == null) {
+            fileChooser.setTitle("Open File");
+            fileChooser.getExtensionFilters().removeAll();
+            fileChooser.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("Java files", "*.java")
+            );
+            file = fileChooser.showOpenDialog(tabPane.getScene().getWindow());
+        } else {
+            file = path.toFile();
+        }
+
+        if (filePaths.contains(file.toPath().toString())) {
+            tabPane.getSelectionModel().select(tabs.get(filePaths.indexOf(file.toPath().toString())));
+            return;
+        }
+
+        String[] splitName;
+        if (file != null) {
+            splitName = file.getName().split("\\.");
+            if (!file.exists() || !file.isFile() || !file.canRead() ||
+                    !file.canWrite() || (!splitName[splitName.length - 1].equals("java") &&
+                        !splitName[splitName.length - 1].equals("txt"))) {
+                return;
+            }
+        } else {
+            return;
+        }
 
         StringBuilder text = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
@@ -200,10 +241,39 @@ public class Controller implements Initializable {
                 text.append("\n");
             }
         } catch (IOException e) {
-            System.out.println(e.getMessage());;
+            System.out.println(e.getMessage());
         }
 
-        newFile(tabPane, file.getPath(), text.toString());
+
+        newFile(tabPane, file.getPath(), text.toString(), splitName[splitName.length - 1].equals("java"));
+
+    }
+
+    @FXML
+    public void openProject() {
+
+        openProject(tabPane);
+    }
+
+    public void openProject(TabPane tabPane) {
+
+        DirectoryChooser directoryChooser = new DirectoryChooser();
+        directoryChooser.setTitle("Select a Directory");
+        directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+
+        File dir = directoryChooser.showDialog(tabPane.getScene().getWindow());
+
+        if (dir != null && dir.exists() && dir.isDirectory()) {
+
+            RootTreeNode root = parseDirectory(dir.toPath());
+            if (root != null) {
+                TreeView<String> treeView = createTree(root);
+                projectView.getChildren().clear();
+                projectView.getChildren().add(treeView);
+                VBox.setVgrow(treeView, Priority.ALWAYS);
+            }
+
+        }
 
     }
 
@@ -281,9 +351,9 @@ public class Controller implements Initializable {
         return indent.toString();
     }
 
-    public void addAccelerator(MenuItem menuItem, KeyCode keyCode, KeyCombination.Modifier keyCodeComb) {
+    public void addAccelerator(MenuItem menuItem, KeyCode keyCode) {
 
-        KeyCombination newComb = new KeyCodeCombination(keyCode, keyCodeComb);
+        KeyCombination newComb = new KeyCodeCombination(keyCode, KeyCombination.CONTROL_DOWN);
         menuItem.setAccelerator(newComb);
 
     }
@@ -395,63 +465,148 @@ public class Controller implements Initializable {
 
     public void color(InlineCssTextArea textArea) {
         String line = textArea.getText();
-        ArrayList<String> lineArray1 = new ArrayList<>();
 
-        Pattern pattern = Pattern.compile("(//[^\\n]*)");
+        line = matchAndColor(line, textArea, "(//[^\\n]*)",
+                "grey", false, false);
+        line = matchAndColor(line, textArea, "/\\*.*?\\*/",
+                "green", true, true);
+
+        int index = 0;
+        int startIndex, endIndex;
+        while (index < line.length()) {
+            while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
+                index++;
+            }
+            startIndex = index;
+            while (index < line.length() && !Character.isWhitespace(line.charAt(index))) {
+                index++;
+            }
+            endIndex = index;
+            if (ORANGE_KEY_WORDS.contains(line.substring(startIndex, endIndex))) {
+                colorThis(textArea, "FF9D00", new int[] { startIndex, endIndex });
+            } else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
+                colorThis(textArea, "black", new int[] { startIndex, endIndex });
+            }
+        }
+
+    }
+
+    public String matchAndColor(String line, InlineCssTextArea textArea, String regex,
+                                           String color, boolean dotAll, boolean boundaries) {
+        Pattern pattern;
+        if (dotAll) {
+            pattern = Pattern.compile(regex, Pattern.DOTALL);
+        } else {
+            pattern = Pattern.compile(regex);
+        }
 
         // Create a matcher for the input text
         Matcher matcher = pattern.matcher(line);
 
-        // Find all matches
-        while (matcher.find()) {
-            // Get the matched text excluding "//"
-            String match = matcher.group(1);
-            lineArray1.add(match);
-        }
-        for (String word: lineArray1) {
-            colorThis(textArea, "grey", word);
-            line = line.replace(word, "");
-        }
-
-        lineArray1 = new ArrayList<>();
-        pattern = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
-
-        // Create a matcher for the input text
-        matcher = pattern.matcher(line);
+        ArrayList<int[]> lineArray = new ArrayList<>();
 
         // Find all matches
         while (matcher.find()) {
-            // Get the matched text including "/*" and "*/"
-            String match = matcher.group();
-            lineArray1.add(match);
-        }
-        for (String word: lineArray1) {
-            colorThis(textArea, "green", word);
-            line = line.replace(word, "");
-        }
-
-        // Split with space, don't include space characters like \n, \t etc.
-        String[] lineArray2 = line.split("\\s+");
-        for (String word: lineArray2) {
-            if (ORANGE_KEY_WORDS.contains(word)) {
-                colorThis(textArea, "red", word);
+            if (boundaries) {
+                lineArray.add(new int[]{matcher.start(), matcher.end()});
             } else {
-                colorThis(textArea, "black", word);
+                lineArray.add(new int[]{matcher.start(1), matcher.end(1)});
             }
         }
-    }
-
-    public void colorThis(InlineCssTextArea textArea, String color, String word) {
-
-        Pattern pattern = Pattern.compile("(?<!\\w)" + Pattern.quote(word) + "(?!\\w)");
-        Matcher matcher = pattern.matcher(textArea.getText());
-
-        while (matcher.find()) {
-            int start = matcher.start();
-            int end = matcher.end();
-            textArea.setStyle(start, end, "-fx-fill: " + color + ";");
+        StringBuilder modifiedLine = new StringBuilder(line);
+        for (int[] word: lineArray) {
+            colorThis(textArea, color, word);
+            modifiedLine.replace(word[0], word[1], "\u0000".repeat(word[1] - word[0]));
         }
 
+        return modifiedLine.toString();
+    }
+
+    public void colorThis(InlineCssTextArea textArea, String color, int[] word) {
+
+        textArea.setStyle(word[0], word[1], "-fx-fill: " + color + ";");
+
+    }
+
+    public RootTreeNode parseDirectory(Path path) {
+
+        RootTreeNode rootDirectory = new RootTreeNode(path);
+        System.out.println(!Files.exists(path));
+        if (!Files.exists(path) || !Files.isDirectory(path)) {
+            return null;
+        }
+        Map<Path, DirectoryTreeNode> pathMap = new HashMap<>();
+        pathMap.put(path, rootDirectory);
+
+        try {
+            Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+
+                @Override
+                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs) throws IOException {
+
+                    DirectoryTreeNode parent = pathMap.get(filePath.getParent());
+                    FileTreeNode file = new FileTreeNode(filePath, parent);
+                    parent.addChild(file);
+                    return FileVisitResult.CONTINUE;
+
+                }
+
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+
+                    if (!dir.equals(path)) {
+                        DirectoryTreeNode parent = pathMap.get(dir.getParent());
+                        DirectoryTreeNode directory = new DirectoryTreeNode(dir, parent);
+                        parent.addChild(directory);
+                        pathMap.put(dir, directory);
+                    }
+                    return FileVisitResult.CONTINUE;
+
+                }
+
+            });
+        } catch (IOException e) {
+
+            System.out.println(e.getMessage());
+        }
+
+        return rootDirectory;
+
+    }
+
+    public TreeView<String> createTree(RootTreeNode root) {
+
+        CustomTreeItem<String> rootItem = new CustomTreeItem<>(root.getName(), root.getPath());
+        rootItem.setExpanded(true);
+        rootItem = addChildren(root, rootItem);
+        TreeView<String> treeView = new TreeView<String>(rootItem);
+        treeView.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
+            if (event.getClickCount() == 2) {
+                TreeItem<String> selectedItem = treeView.getSelectionModel().getSelectedItem();
+                CustomTreeItem<String> item = (CustomTreeItem<String>) selectedItem;
+                if (selectedItem != null) {
+                    openFile(tabPane, item.getPath());
+                }
+            }
+        });
+        return treeView;
+
+    }
+
+    public CustomTreeItem<String> addChildren(TreeNode parentNode, CustomTreeItem<String> parentItem) {
+
+        for (TreeNode childNode : parentNode.getChildren()) {
+
+            CustomTreeItem<String> childItem = new CustomTreeItem<>(childNode.getName(), childNode.getPath());
+            childItem.setExpanded(true);
+            parentItem.getChildren().add(childItem);
+            if (childNode instanceof DirectoryTreeNode) {
+                addChildren(childNode, childItem);
+            }
+
+        }
+
+        return parentItem;
     }
 
 }

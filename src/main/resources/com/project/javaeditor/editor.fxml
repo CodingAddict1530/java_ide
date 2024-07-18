@@ -3,6 +3,7 @@
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SplitPane?>
 <?import javafx.scene.control.TabPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
@@ -13,17 +14,18 @@
         <menus>
           <Menu mnemonicParsing="false" text="File">
             <items>
-              <MenuItem fx:id="newFile" mnemonicParsing="false" onAction="#newFile" text="New     Ctrl + N" />
-                  <MenuItem fx:id="openFile" mnemonicParsing="false" onAction="#openFile" text="Open     Ctrl + O" />
-                  <MenuItem fx:id="saveFile" mnemonicParsing="false" onAction="#saveFile" text="Save     Ctrl + S" />
-                  <MenuItem fx:id="closeFile" mnemonicParsing="false" onAction="#closeFile" text="Close     Ctrl + Q" />
+              <MenuItem fx:id="newFile" mnemonicParsing="false" onAction="#newFile" text="New" />
+                  <MenuItem fx:id="openFile" mnemonicParsing="false" onAction="#openFile" text="Open" />
+                  <MenuItem fx:id="saveFile" mnemonicParsing="false" onAction="#saveFile" text="Save" />
+                  <MenuItem fx:id="closeFile" mnemonicParsing="false" onAction="#closeFile" text="Close" />
+                  <MenuItem fx:id="openProject" mnemonicParsing="false" onAction="#openProject" text="Open Project" />
             </items>
           </Menu>
           <Menu mnemonicParsing="false" text="Edit">
             <items>
-              <MenuItem fx:id="cut" mnemonicParsing="false" text="Cut     Ctrl + X" />
-                  <MenuItem fx:id="copy" mnemonicParsing="false" text="Copy     Ctrl + C" />
-                  <MenuItem fx:id="paste" mnemonicParsing="false" text="Paste     Ctrl + V" />
+              <MenuItem fx:id="cut" mnemonicParsing="false" text="Cut" />
+                  <MenuItem fx:id="copy" mnemonicParsing="false" text="Copy" />
+                  <MenuItem fx:id="paste" mnemonicParsing="false" text="Paste" />
             </items>
           </Menu>
           <Menu mnemonicParsing="false" text="Help">
@@ -33,7 +35,12 @@
           </Menu>
         </menus>
       </MenuBar>
-      <TabPane fx:id="tabPane" prefHeight="200.0" prefWidth="200.0" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" />
+      <SplitPane fx:id="splitPane" dividerPositions="0.5" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS">
+         <items>
+            <VBox fx:id="projectView" alignment="TOP_RIGHT" prefHeight="341.0" prefWidth="126.0" />
+            <TabPane fx:id="tabPane" prefHeight="200.0" prefWidth="343.0" tabClosingPolicy="UNAVAILABLE" />
+         </items>
+      </SplitPane>
       <HBox prefHeight="31.0" prefWidth="600.0" />
    </children>
 </VBox>
