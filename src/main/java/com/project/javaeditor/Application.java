@@ -6,9 +6,17 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Objects;
 
+import static utility.Utility.write;
+import static utility.Utility.read;
+
 public class Application extends javafx.application.Application {
+
+    private Controller controller;
 
     @Override
     public void start(Stage stage) throws IOException {
@@ -19,7 +27,31 @@ public class Application extends javafx.application.Application {
         scene.getStylesheets().add(Objects.requireNonNull(getClass().getResource("style.css")).toExternalForm());
         stage.setTitle("Java Editor!");
         stage.setScene(scene);
+        ArrayList<Path> previousContent = null;
+        try {
+            previousContent = read(Paths.get("src/main/files/records.dat"));
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+        controller = fxmlLoader.getController();
+        controller.addPreviousContent(previousContent);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+
+        try {
+            System.out.println(write(
+                    Paths.get("src/main/files/records.dat"),
+                    true,
+                    controller.getOpenProjectPath(),
+                    controller.getOpenFilesPaths()
+            ));
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+
     }
 
     public static void main(String[] args) {

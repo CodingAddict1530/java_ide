@@ -10,12 +10,15 @@ import javafx.scene.layout.HBox;
 
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import org.fxmisc.richtext.InlineCssTextArea;
 import org.fxmisc.richtext.LineNumberFactory;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeRegular;
+import org.kordamp.ikonli.javafx.FontIcon;
 import utility.*;
 
 import java.io.File;
@@ -66,12 +69,12 @@ public class Controller implements Initializable {
     private final ArrayList<Boolean> saved = new ArrayList<>();
     private final FileChooser fileChooser = new FileChooser();
     private final Clipboard clipboard = Clipboard.getSystemClipboard();
+    private Path openProjectPath = null;
+    private final ArrayList<Path> openFilesPaths = new ArrayList<>();
 
     @FXML
     @Override
     public void initialize(URL url, ResourceBundle rb) {
-
-        newFile(tabPane, null, null, true);
 
         addAccelerator(newFile, KeyCode.N);
         addAccelerator(openFile, KeyCode.O);
@@ -160,6 +163,7 @@ public class Controller implements Initializable {
         }
         if (tab != null) {
             saved.remove(tabs.indexOf(tab));
+            openFilesPaths.remove(Paths.get(filePaths.get(tabs.indexOf(tab))));
             filePaths.remove(tabs.indexOf(tab));
             tabs.remove(tab);
             tabPane.getTabs().remove(tab);
@@ -190,6 +194,9 @@ public class Controller implements Initializable {
                     new FileChooser.ExtensionFilter("Java files", "*.java")
             );
             file = fileChooser.showSaveDialog(tabPane.getScene().getWindow());
+            if (file != null) {
+                openFilesPaths.add(file.toPath());
+            }
         }
         if (file != null) {
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
@@ -256,7 +263,7 @@ public class Controller implements Initializable {
             System.out.println(e.getMessage());
         }
 
-
+        openFilesPaths.add(file.toPath());
         newFile(tabPane, file.getPath(), text.toString(), splitName[splitName.length - 1].equals("java"));
 
     }
@@ -264,22 +271,27 @@ public class Controller implements Initializable {
     @FXML
     public void openProject() {
 
-        openProject(tabPane);
+        openProject(tabPane, null);
     }
 
-    public void openProject(TabPane tabPane) {
+    public void openProject(TabPane tabPane, Path path) {
 
-        DirectoryChooser directoryChooser = new DirectoryChooser();
-        directoryChooser.setTitle("Select a Directory");
-        directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
-
-        File dir = directoryChooser.showDialog(tabPane.getScene().getWindow());
+        File dir;
+        if (path == null) {
+            DirectoryChooser directoryChooser = new DirectoryChooser();
+            directoryChooser.setTitle("Select a Directory");
+            directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+            dir = directoryChooser.showDialog(tabPane.getScene().getWindow());
+        } else {
+            dir = path.toFile();
+        }
 
         if (dir != null && dir.exists() && dir.isDirectory()) {
 
             RootTreeNode root = parseDirectory(dir.toPath());
             if (root != null) {
-                TreeView<String> treeView = createTree(root);
+                openProjectPath = root.getPath();
+                TreeView<HBox> treeView = createTree(root);
                 projectView.getChildren().clear();
                 projectView.getChildren().add(treeView);
                 VBox.setVgrow(treeView, Priority.ALWAYS);
@@ -671,16 +683,22 @@ public class Controller implements Initializable {
 
     }
 
-    public TreeView<String> createTree(RootTreeNode root) {
+    public TreeView<HBox> createTree(RootTreeNode root) {
 
-        CustomTreeItem<String> rootItem = new CustomTreeItem<>(root.getName(), root.getPath());
+        HBox hBox = new HBox();
+        FontIcon icon = new FontIcon(FontAwesomeRegular.FOLDER_OPEN);
+        icon.setIconColor(Color.RED);
+        hBox.getChildren().add(icon);
+        hBox.getChildren().add(new Label("  " + root.getName()));
+        hBox.setAlignment(Pos.CENTER_LEFT);
+        CustomTreeItem<HBox> rootItem = new CustomTreeItem<>(hBox, root.getPath());
         rootItem.setExpanded(true);
         rootItem = addChildren(root, rootItem);
-        TreeView<String> treeView = new TreeView<>(rootItem);
+        TreeView<HBox> treeView = new TreeView<>(rootItem);
         treeView.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
             if (event.getClickCount() == 2) {
-                TreeItem<String> selectedItem = treeView.getSelectionModel().getSelectedItem();
-                CustomTreeItem<String> item = (CustomTreeItem<String>) selectedItem;
+                TreeItem<HBox> selectedItem = treeView.getSelectionModel().getSelectedItem();
+                CustomTreeItem<HBox> item = (CustomTreeItem<HBox>) selectedItem;
                 if (selectedItem != null) {
                     openFile(tabPane, item.getPath());
                 }
@@ -690,11 +708,22 @@ public class Controller implements Initializable {
 
     }
 
-    public CustomTreeItem<String> addChildren(TreeNode parentNode, CustomTreeItem<String> parentItem) {
+    public CustomTreeItem<HBox> addChildren(TreeNode parentNode, CustomTreeItem<HBox> parentItem) {
 
         for (TreeNode childNode : parentNode.getChildren()) {
 
-            CustomTreeItem<String> childItem = new CustomTreeItem<>(childNode.getName(), childNode.getPath());
+            HBox hBox = new HBox();
+            String[] parts = childNode.getName().split("\\.");
+            FontIcon icon = new FontIcon((childNode instanceof DirectoryTreeNode) ?
+                    FontAwesomeRegular.FOLDER_OPEN :
+                    (Objects.equals(parts[parts.length - 1], "java")) ? FontAwesomeRegular.FILE_CODE :
+                    FontAwesomeRegular.FILE);
+            icon.setIconColor((childNode instanceof DirectoryTreeNode) ? Color.GREEN :
+                    (Objects.equals(parts[parts.length - 1], "java")) ? Color.PURPLE : Color.GRAY);
+            hBox.getChildren().add(icon);
+            hBox.getChildren().add(new Label("  " + childNode.getName()));
+            hBox.setAlignment(Pos.CENTER_LEFT);
+            CustomTreeItem<HBox> childItem = new CustomTreeItem<>(hBox, childNode.getPath());
             childItem.setExpanded(true);
             parentItem.getChildren().add(childItem);
             if (childNode instanceof DirectoryTreeNode) {
@@ -726,6 +755,32 @@ public class Controller implements Initializable {
             contextMenu.getItems().add(menuItem);
         }
         return contextMenu;
+
+    }
+
+    public ArrayList<Path> getOpenFilesPaths() {
+
+        return this.openFilesPaths;
+    }
+
+    public Path getOpenProjectPath() {
+
+        return this.openProjectPath;
+    }
+
+    public void addPreviousContent(ArrayList<Path> paths) {
+
+        if (paths != null) {
+            openProject(tabPane, paths.get(0));
+            if (paths.size() > 1) {
+                paths.remove(0);
+                for (Path file : paths) {
+                    openFile(tabPane, file);
+                }
+            }
+        } else {
+            newFile(tabPane, null, null, true);
+        }
 
     }
 
