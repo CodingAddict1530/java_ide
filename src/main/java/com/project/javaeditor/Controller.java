@@ -65,6 +65,7 @@ public class Controller implements Initializable {
     private final ArrayList<String> filePaths = new ArrayList<>();
     private final ArrayList<Boolean> saved = new ArrayList<>();
     private final FileChooser fileChooser = new FileChooser();
+    private final Clipboard clipboard = Clipboard.getSystemClipboard();
 
     @FXML
     @Override
@@ -126,6 +127,17 @@ public class Controller implements Initializable {
             addEventHandlers(textArea, newTab);
         }
         textArea.replaceText((text == null) ? "" : text);
+        ContextMenu contextMenu = getContextMenu(
+                new Object[]{"Cut", KeyCode.X, 1},
+                new Object[]{"Copy", KeyCode.C, 2},
+                new Object[]{"Paste", KeyCode.V, 3}
+        );
+        textArea.setContextMenu(contextMenu);
+        textArea.setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.SECONDARY) {
+                contextMenu.show(textArea, event.getScreenX(), event.getScreenY());
+            }
+        });
         color(textArea);
 
         newTab.setContent(textArea);
@@ -277,6 +289,52 @@ public class Controller implements Initializable {
 
     }
 
+    @FXML
+    public void copy() {
+
+        copy(tabPane);
+    }
+
+    public void copy(TabPane tabPane) {
+
+        InlineCssTextArea textArea = (InlineCssTextArea) tabPane.getSelectionModel().getSelectedItem().getContent();
+        ClipboardContent content = new ClipboardContent();
+        content.putString(textArea.getSelectedText());
+        clipboard.setContent(content);
+
+    }
+
+    @FXML
+    public void cut() {
+
+        cut(tabPane);
+    }
+
+    public void cut(TabPane tabPane) {
+
+        copy();
+        InlineCssTextArea textArea = (InlineCssTextArea) tabPane.getSelectionModel().getSelectedItem().getContent();
+        textArea.deleteText(textArea.getSelection().getStart(), textArea.getSelection().getEnd());
+
+    }
+
+    @FXML
+    public void paste() {
+
+        paste(tabPane);
+    }
+
+    public void paste(TabPane tabPane) {
+
+        if (clipboard.hasString()) {
+            InlineCssTextArea textArea = (InlineCssTextArea) tabPane.getSelectionModel().getSelectedItem().getContent();
+            textArea.deleteText(textArea.getSelection().getStart(), textArea.getSelection().getEnd());
+            textArea.insertText(textArea.getCaretPosition(), clipboard.getString());
+
+        }
+
+    }
+
     public String textHandler(InlineCssTextArea textArea) {
 
         String line = getLine(textArea);
@@ -395,6 +453,26 @@ public class Controller implements Initializable {
                     }
                     color(textArea);
                     break;
+                case "\"":
+                    event.consume();
+                    if (textArea.getSelectedText().isEmpty()) {
+                        textArea.replaceText(caretPosition, caretPosition, "\"\"");
+                        textArea.moveTo(caretPosition + 1);
+                    } else {
+                        textArea.replaceSelection(String.format("\"%s\"", textArea.getSelectedText()));
+                    }
+                    color(textArea);
+                    break;
+                case "'":
+                    event.consume();
+                    if (textArea.getSelectedText().isEmpty()) {
+                        textArea.replaceText(caretPosition, caretPosition, "''");
+                        textArea.moveTo(caretPosition + 1);
+                    } else {
+                        textArea.replaceSelection(String.format("'%s'", textArea.getSelectedText()));
+                    }
+                    color(textArea);
+                    break;
                 case "*":
                     event.consume();
                     if (!textArea.getText().isEmpty() &&
@@ -422,7 +500,8 @@ public class Controller implements Initializable {
                     char caretLeft = caretPosition > 0 ? text.charAt(caretPosition - 1) : '\u0000';
                     char caretRight = caretPosition < text.length() ? text.charAt(caretPosition) : '\u0000';
                     if ((caretLeft == '(' && caretRight == ')') || (caretLeft == '{' && caretRight == '}') ||
-                            (caretLeft == '[' && caretRight == ']')) {
+                            (caretLeft == '[' && caretRight == ']') || (caretLeft == '\"' && caretRight == '\"') ||
+                                (caretLeft == '\'' && caretRight == '\'')) {
                         textArea.replaceText(caretPosition, caretPosition + 1, "");
                     }
                     break;
@@ -466,19 +545,37 @@ public class Controller implements Initializable {
     public void color(InlineCssTextArea textArea) {
         String line = textArea.getText();
 
+        line = matchAndColor(line, textArea, "/\\*.*?\\*/",
+                "green", true, true);
         line = matchAndColor(line, textArea, "(//[^\\n]*)",
                 "grey", false, false);
-        line = matchAndColor(line, textArea, "/\\*.*?\\*/",
+        line = matchAndColor(line, textArea, "\"([^\"]*)\"",
                 "green", true, true);
 
         int index = 0;
         int startIndex, endIndex;
+        boolean decrement = false;
         while (index < line.length()) {
-            while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
+            while (index < line.length() && (Character.isWhitespace(line.charAt(index)) ||
+                    (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') ||
+                    (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000'))) {
                 index++;
             }
-            startIndex = index;
+            if (decrement) {
+                decrement = false;
+                startIndex = index - 1;
+            } else {
+                startIndex = index;
+            }
             while (index < line.length() && !Character.isWhitespace(line.charAt(index))) {
+                if (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') {
+                    decrement = true;
+                    break;
+                }
+                if (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000') {
+                    //decrement = true;
+                    break;
+                }
                 index++;
             }
             endIndex = index;
@@ -539,10 +636,10 @@ public class Controller implements Initializable {
         pathMap.put(path, rootDirectory);
 
         try {
-            Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(path, new SimpleFileVisitor<>() {
 
                 @Override
-                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs) throws IOException {
+                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs){
 
                     DirectoryTreeNode parent = pathMap.get(filePath.getParent());
                     FileTreeNode file = new FileTreeNode(filePath, parent);
@@ -552,7 +649,7 @@ public class Controller implements Initializable {
                 }
 
                 @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
 
                     if (!dir.equals(path)) {
                         DirectoryTreeNode parent = pathMap.get(dir.getParent());
@@ -579,7 +676,7 @@ public class Controller implements Initializable {
         CustomTreeItem<String> rootItem = new CustomTreeItem<>(root.getName(), root.getPath());
         rootItem.setExpanded(true);
         rootItem = addChildren(root, rootItem);
-        TreeView<String> treeView = new TreeView<String>(rootItem);
+        TreeView<String> treeView = new TreeView<>(rootItem);
         treeView.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
             if (event.getClickCount() == 2) {
                 TreeItem<String> selectedItem = treeView.getSelectionModel().getSelectedItem();
@@ -607,6 +704,29 @@ public class Controller implements Initializable {
         }
 
         return parentItem;
+    }
+
+    public ContextMenu getContextMenu(Object[]... menus) {
+
+        ContextMenu contextMenu = new ContextMenu();
+        for (Object[] menu : menus) {
+            MenuItem menuItem = new MenuItem((String)menu[0]);
+            addAccelerator(menuItem, (KeyCode) menu[1]);
+            switch ((Integer) menu[2]) {
+                case 1:
+                    menuItem.setOnAction(event -> cut());
+                    break;
+                case 2:
+                    menuItem.setOnAction(event -> copy());
+                    break;
+                case 3:
+                    menuItem.setOnAction(event -> paste());
+                    break;
+            }
+            contextMenu.getItems().add(menuItem);
+        }
+        return contextMenu;
+
     }
 
 }
