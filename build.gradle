@@ -45,6 +45,8 @@ dependencies {
         exclude(group: 'org.openjfx')
     }
     implementation group: 'org.fxmisc.richtext', name: 'richtextfx', version: '0.11.3'
+    implementation group: 'org.kordamp.ikonli', name: 'ikonli-javafx', version: '12.3.1'
+    implementation group: 'org.kordamp.ikonli', name: 'ikonli-fontawesome5-pack', version: '12.3.1'
     implementation('org.kordamp.ikonli:ikonli-javafx:12.3.1')
     implementation('org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0')
     implementation('eu.hansolo:tilesfx:11.48') {
