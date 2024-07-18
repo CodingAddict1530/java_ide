@@ -14,4 +14,5 @@ module com.project.javaeditor {
 
     opens com.project.javaeditor to javafx.fxml;
     exports com.project.javaeditor;
+    exports utility;
 }
