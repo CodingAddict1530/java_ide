@@ -1,4 +1,4 @@
-package utility;
+package custom_classes;
 
 import javafx.scene.control.TreeItem;
 

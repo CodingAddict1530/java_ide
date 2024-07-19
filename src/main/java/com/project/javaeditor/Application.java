@@ -4,6 +4,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import utility.MainUtility;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -11,12 +12,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Objects;
 
-import static utility.Utility.write;
-import static utility.Utility.read;
 
 public class Application extends javafx.application.Application {
-
-    private Controller controller;
 
     @Override
     public void start(Stage stage) throws IOException {
@@ -25,15 +22,15 @@ public class Application extends javafx.application.Application {
         Parent root = fxmlLoader.load();
         Scene scene = new Scene(root, 1000, 600);
         scene.getStylesheets().add(Objects.requireNonNull(getClass().getResource("style.css")).toExternalForm());
-        stage.setTitle("Java Editor!");
+        stage.setTitle("Not An IDE");
         stage.setScene(scene);
         ArrayList<Path> previousContent = null;
         try {
-            previousContent = read(Paths.get("src/main/files/records.dat"));
+            previousContent = MainUtility.read(Paths.get("src/main/files/records.dat"));
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
-        controller = fxmlLoader.getController();
+        Controller controller = fxmlLoader.getController();
         controller.addPreviousContent(previousContent);
         stage.show();
     }
@@ -42,11 +39,9 @@ public class Application extends javafx.application.Application {
     public void stop() {
 
         try {
-            System.out.println(write(
+            System.out.println(MainUtility.writeOpenData(
                     Paths.get("src/main/files/records.dat"),
-                    true,
-                    controller.getOpenProjectPath(),
-                    controller.getOpenFilesPaths()
+                    true
             ));
         } catch (Exception e) {
             System.out.println(e.getMessage());

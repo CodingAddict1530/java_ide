@@ -1,6 +1,6 @@
-package javaCompilation;
+package java_code_processing;
 
-import utility.ConsoleTextArea;
+import custom_classes.ConsoleTextArea;
 
 import javax.tools.*;
 import java.io.*;
@@ -54,7 +54,7 @@ public class JavaCodeExecutor {
                     while ((line = bufferedReader.readLine()) != null) {
                         // Update TextArea on JavaFX Application Thread
                         String finalLine = line;
-                        javafx.application.Platform.runLater(() -> textArea.appendText(finalLine + "\n"));
+                        javafx.application.Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "black"));
                     }
                 } catch (IOException e) {
                     System.out.println(e.getMessage());
