@@ -815,20 +815,25 @@ public class Controller implements Initializable {
 
     public void setUpConsole() {
 
-        InlineCssTextArea textArea = new InlineCssTextArea();
+        ConsoleTextArea textArea = new ConsoleTextArea();
         textArea.getStyleClass().add("inline-css-text-area-console");
         textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
             int caretPos = textArea.getCaretPosition();
             String character = event.getCharacter();
             event.consume();
-            textArea.insertText(caretPos, character);
-            textArea.moveTo(caretPos + 1);
-            if (character.matches("\\S")) {
-                textArea.setStyle(caretPos,
-                        caretPos + 1, "-fx-fill: green;");
+            if (!Objects.equals(character, "\b")) {
+                textArea.insertText(caretPos, character);
+                textArea.moveTo(caretPos + 1);
+                if (character.matches("\\S")) {
+                    textArea.setStyle(caretPos,
+                            caretPos + 1, "-fx-fill: green;");
+                }
             }
         });
+
+        textArea.protectText();
+
         HBox.setHgrow(textArea, Priority.ALWAYS);
         console.getChildren().add(textArea);
 
@@ -930,7 +935,11 @@ public class Controller implements Initializable {
         } else {
             file = new File(filePaths.get(tabs.indexOf(tab)));
         }
-        System.out.println(JavaCodeExecutor.run(file, (InlineCssTextArea) console.getChildren().get(0)));
+        ConsoleTextArea consoleTextArea = (ConsoleTextArea) console.getChildren().get(0);
+        consoleTextArea.unprotectText();
+        consoleTextArea.replaceText("");
+        consoleTextArea.protectText();
+        System.out.println(JavaCodeExecutor.run(file, consoleTextArea));
 
     }
 

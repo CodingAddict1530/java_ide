@@ -1,11 +1,9 @@
 package javaCompilation;
 
-import org.fxmisc.richtext.InlineCssTextArea;
+import utility.ConsoleTextArea;
 
 import javax.tools.*;
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -17,17 +15,7 @@ public class JavaCodeExecutor {
     // 1 Couldn't read file
     // 2 Compilation failed
     // 3 Couldn't delete
-    // 4 Couldn't copy
-    public static int run(File file, InlineCssTextArea textArea) {
-
-        // Copy the file
-        try {
-            Files.copy(file.toPath(), Paths.get("src/main/files/" + file.getName()));
-            file = new File("src/main/files/" + file.getName());
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
-            return 4;
-        }
+    public static int run(File file, ConsoleTextArea textArea) {
 
         int returnValue = 0;
         String sourceCode = readSourceFile(file);
@@ -35,7 +23,7 @@ public class JavaCodeExecutor {
             return 1;
         }
 
-        boolean compile = compile(sourceCode, file);
+        boolean compile = compile(sourceCode, file, textArea);
         String[] parts = file.getName().split("\\.");
         if (compile) {
             setUpInputHandling(textArea);
@@ -46,7 +34,7 @@ public class JavaCodeExecutor {
         return returnValue;
     }
 
-    private static void execute(String name, InlineCssTextArea textArea) {
+    private static void execute(String name, ConsoleTextArea textArea) {
 
         ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp",
                 ".", name);
@@ -83,7 +71,6 @@ public class JavaCodeExecutor {
                     outputThread.join();
                     javafx.application.Platform.runLater(() -> textArea.appendText("\nProcess Finished with exit code " + exitCode + "\n"));
                     new File("src/main/classes/" + name + ".class").delete();
-                    new File("src/main/files/" + name + ".java").delete();
                 } catch (Exception e) {
                     System.out.println(e.getMessage());
                 }
@@ -98,7 +85,7 @@ public class JavaCodeExecutor {
 
     }
 
-    private static void setUpInputHandling(InlineCssTextArea textArea) {
+    private static void setUpInputHandling(ConsoleTextArea textArea) {
 
         textArea.setOnKeyPressed(event -> {
             if (event.getCode().toString().equals("ENTER")) {
@@ -116,7 +103,7 @@ public class JavaCodeExecutor {
 
     }
 
-    private static String getUserInput(InlineCssTextArea textArea) {
+    private static String getUserInput(ConsoleTextArea textArea) {
 
         int caretPosition = textArea.getCaretPosition();
         int start = caretPosition;
@@ -133,7 +120,7 @@ public class JavaCodeExecutor {
 
     }
 
-    private static boolean compile(String sourceCode,  File file) {
+    private static boolean compile(String sourceCode,  File file, ConsoleTextArea textArea) {
 
         // Get compiler
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -157,9 +144,33 @@ public class JavaCodeExecutor {
         JavaFileManager fileManager = new ForwardingJavaFileManager<>(
                 compiler.getStandardFileManager(null, null, null)
         ) {};
-        JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager,
-                null, Arrays.asList("-d", "src/main/classes"), null, Collections.singleton(fileObject));
-        return task.call();
+
+        // Set up writer
+        StringWriter stdOutWriter = new StringWriter();
+        StringWriter stdErrWriter = new StringWriter();
+        PrintWriter stdOut = new PrintWriter(stdOutWriter);
+        PrintWriter stdErr = new PrintWriter(stdErrWriter);
+
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+
+        // Compile
+        JavaCompiler.CompilationTask task = compiler.getTask(stdOut, fileManager,
+                diagnostics, Arrays.asList("-d", "src/main/classes"), null, Collections.singleton(fileObject));
+
+        boolean result = task.call();
+
+        stdOut.close();
+        stdErr.close();
+
+        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+            appendStyledText(
+                    textArea,
+                    diagnostic.getMessage(null),
+                    (diagnostic.getKind() == Diagnostic.Kind.ERROR) ? "red" : "black"
+            );
+        }
+
+        return result;
 
     }
 
@@ -177,6 +188,15 @@ public class JavaCodeExecutor {
             return null;
         }
         return sourceCode.toString();
+
+    }
+
+    private static void appendStyledText(ConsoleTextArea textArea, String text, String color) {
+
+        int start = textArea.getLength();
+        textArea.appendText(text);
+        int end = textArea.getLength();
+        textArea.setStyle(start, end, "-fx-fill: " + color + ";");
 
     }
 
