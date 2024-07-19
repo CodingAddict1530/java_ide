@@ -1,11 +1,13 @@
 package com.project.javaeditor;
 
+import javaCompilation.JavaCodeExecutor;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.input.*;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 
 import javafx.scene.layout.Priority;
@@ -18,9 +20,11 @@ import javafx.stage.FileChooser;
 import org.fxmisc.richtext.InlineCssTextArea;
 import org.fxmisc.richtext.LineNumberFactory;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeRegular;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.javafx.FontIcon;
 import utility.*;
 
+import javax.tools.ToolProvider;
 import java.io.File;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -61,6 +65,12 @@ public class Controller implements Initializable {
     private VBox projectView;
     @FXML
     private SplitPane splitPane;
+    @FXML
+    private SplitPane verticalSplitPane;
+    @FXML
+    private HBox footer;
+    @FXML
+    private HBox console;
 
     private int moveCaret = 0;
 
@@ -68,9 +78,11 @@ public class Controller implements Initializable {
     private final ArrayList<String> filePaths = new ArrayList<>();
     private final ArrayList<Boolean> saved = new ArrayList<>();
     private final FileChooser fileChooser = new FileChooser();
+    private final DirectoryChooser directoryChooser = new DirectoryChooser();
     private final Clipboard clipboard = Clipboard.getSystemClipboard();
     private Path openProjectPath = null;
     private final ArrayList<Path> openFilesPaths = new ArrayList<>();
+    private SettingsResult settingsResult;
 
     @FXML
     @Override
@@ -85,7 +97,25 @@ public class Controller implements Initializable {
         addAccelerator(paste, KeyCode.V);
         addAccelerator(openProject, KeyCode.P);
 
+        footer.setAlignment(Pos.CENTER);
+        FontIcon runIcon = new FontIcon(FontAwesomeSolid.PLAY);
+        runIcon.setIconSize(20);
+        runIcon.setIconColor(Color.GREEN);
+        Button runBtn = new Button();
+        runBtn.setGraphic(runIcon);
+        runBtn.setOnAction(event -> run());
+        FontIcon settingsIcon = new FontIcon(FontAwesomeSolid.COG);
+        settingsIcon.setIconSize(20);
+        //settingsIcon.setIconColor(Color.GREEN);
+        Button settingsBtn = new Button();
+        settingsBtn.setGraphic(settingsIcon);
+        settingsBtn.setOnAction(event -> showSettings());
+        footer.getChildren().add(runBtn);
+        footer.getChildren().add(settingsBtn);
+
         splitPane.setDividerPositions(0.3);
+        verticalSplitPane.setDividerPositions(1);
+        setUpConsole();
 
     }
 
@@ -278,7 +308,6 @@ public class Controller implements Initializable {
 
         File dir;
         if (path == null) {
-            DirectoryChooser directoryChooser = new DirectoryChooser();
             directoryChooser.setTitle("Select a Directory");
             directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
             dir = directoryChooser.showDialog(tabPane.getScene().getWindow());
@@ -782,6 +811,135 @@ public class Controller implements Initializable {
             newFile(tabPane, null, null, true);
         }
 
+    }
+
+    public void setUpConsole() {
+
+        InlineCssTextArea textArea = new InlineCssTextArea();
+        textArea.getStyleClass().add("inline-css-text-area-console");
+        textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+
+            int caretPos = textArea.getCaretPosition();
+            String character = event.getCharacter();
+            event.consume();
+            textArea.insertText(caretPos, character);
+            textArea.moveTo(caretPos + 1);
+            if (character.matches("\\S")) {
+                textArea.setStyle(caretPos,
+                        caretPos + 1, "-fx-fill: green;");
+            }
+        });
+        HBox.setHgrow(textArea, Priority.ALWAYS);
+        console.getChildren().add(textArea);
+
+
+    }
+
+    public void showSettings() {
+
+        String javaPath = getJavaPath();
+
+        Dialog<SettingsResult> dialog = createSettingsDialog(javaPath);
+        dialog.showAndWait().ifPresent(result -> {
+            settingsResult = result;
+        });
+
+        System.out.println(settingsResult);
+
+    }
+
+    public Dialog<SettingsResult> createSettingsDialog(String javaPath) {
+
+        Dialog<SettingsResult> dialog = new Dialog<>();
+        dialog.setTitle("Settings");
+
+        ButtonType apply = new ButtonType("Apply", ButtonType.OK.getButtonData());
+        dialog.getDialogPane().getButtonTypes().addAll(apply, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+
+        Label folderLabel = new Label("Folder:");
+        TextField folderTextField = new TextField();
+        folderTextField.setText((javaPath == null) ? "" : javaPath);
+        Button folderButton = new Button("Browse");
+
+        folderButton.setOnAction(event -> {
+
+            directoryChooser.setTitle("Select folder");
+            directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+            File selectedDir = directoryChooser.showDialog(tabPane.getScene().getWindow());
+            if (selectedDir != null) {
+                folderTextField.setText(selectedDir.getAbsolutePath());
+            }
+
+        });
+
+        Label themeLabel = new Label("Theme:");
+        ComboBox<String> themeComboBox = new ComboBox<>();
+        themeComboBox.getItems().addAll("Light", "Dark");
+        themeComboBox.getSelectionModel().selectFirst();
+
+        Label fontSizeLabel = new Label("Font Size:");
+        Spinner<Integer> fontSizeSpinner = new Spinner<>(10, 40, 14);
+        fontSizeSpinner.setEditable(true);
+
+        grid.add(folderLabel, 0, 0);
+        grid.add(folderTextField, 1, 0);
+        grid.add(folderButton, 2, 0);
+        grid.add(themeLabel, 0, 1);
+        grid.add(themeComboBox, 1, 1);
+        grid.add(fontSizeLabel, 0, 2);
+        grid.add(fontSizeSpinner, 1, 2);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == apply) {
+                return new SettingsResult(
+                        Paths.get(folderTextField.getText()),
+                        (Objects.equals(themeComboBox.getValue(), "Light")) ? Theme.LIGHT : Theme.DARK,
+                        fontSizeSpinner.getValue()
+                );
+            }
+            return null;
+        });
+
+        return dialog;
+    }
+
+    public void run() {
+
+        verticalSplitPane.setDividerPositions(0.7);
+        Tab tab = tabPane.getSelectionModel().getSelectedItem();
+        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
+        File file;
+        if (filePaths.get(tabs.indexOf(tab)) == null) {
+            file = new File("src/main/dummy/dummy.java");
+            try {
+                if (file.createNewFile()) {
+                    try (FileWriter writer = new FileWriter(file)) {
+                        writer.write(textArea.getText());
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+                return;
+            }
+        } else {
+            file = new File(filePaths.get(tabs.indexOf(tab)));
+        }
+        System.out.println(JavaCodeExecutor.run(file, (InlineCssTextArea) console.getChildren().get(0)));
+
+    }
+
+    public String getJavaPath() {
+
+        if (ToolProvider.getSystemJavaCompiler() != null) {
+            return System.getProperty("java.home");
+        }
+        return null;
     }
 
 }

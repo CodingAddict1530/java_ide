@@ -17,7 +17,12 @@
 
 .inline-css-text-area {
     -fx-padding: 1em;
-    -fx-font-size: 1.3em;
+    -fx-font-size: 14px;
     -fx-font-family: 'JetBrains Mono';
 }
 
+.inline-css-text-area-console {
+    -fx-padding: 1em;
+    -fx-font-size: 1.1em;
+    -fx-font-family: 'JetBrains Mono';
+}

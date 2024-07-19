@@ -12,6 +12,7 @@ module com.project.javaeditor {
     requires net.synedra.validatorfx;
     requires org.kordamp.bootstrapfx.core;
     requires eu.hansolo.tilesfx;
+    requires java.compiler;
 
     opens com.project.javaeditor to javafx.fxml;
     exports com.project.javaeditor;

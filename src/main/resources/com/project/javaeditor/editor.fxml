@@ -35,12 +35,17 @@
           </Menu>
         </menus>
       </MenuBar>
-      <SplitPane fx:id="splitPane" dividerPositions="0.5" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS">
+      <SplitPane fx:id="verticalSplitPane" dividerPositions="0.5" orientation="VERTICAL" prefHeight="200.0" prefWidth="160.0" VBox.vgrow="ALWAYS">
          <items>
-            <VBox fx:id="projectView" alignment="TOP_RIGHT" prefHeight="341.0" prefWidth="126.0" />
-            <TabPane fx:id="tabPane" prefHeight="200.0" prefWidth="343.0" tabClosingPolicy="UNAVAILABLE" />
+            <SplitPane fx:id="splitPane" dividerPositions="0.5" prefHeight="200.0" prefWidth="200.0">
+               <items>
+                  <VBox fx:id="projectView" alignment="TOP_RIGHT" prefHeight="341.0" prefWidth="126.0" />
+                  <TabPane fx:id="tabPane" prefHeight="200.0" prefWidth="343.0" tabClosingPolicy="UNAVAILABLE" />
+               </items>
+            </SplitPane>
+            <HBox fx:id="console" prefWidth="200.0" />
          </items>
       </SplitPane>
-      <HBox prefHeight="31.0" prefWidth="600.0" />
+      <HBox fx:id="footer" prefHeight="31.0" prefWidth="600.0" />
    </children>
 </VBox>
