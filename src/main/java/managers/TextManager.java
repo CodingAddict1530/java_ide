@@ -7,7 +7,7 @@ import org.fxmisc.richtext.InlineCssTextArea;
 
 public class TextManager {
 
-    private static final Clipboard clipboard = Clipboard.getSystemClipboard();
+    private static  Clipboard clipboard;
     private static TabPane tabPane;
 
     public static void cut() {
@@ -43,4 +43,8 @@ public class TextManager {
         TextManager.tabPane = tabPane;
     }
 
+    public static void setClipboard(Clipboard clipboard) {
+
+        TextManager.clipboard = clipboard;
+    }
 }

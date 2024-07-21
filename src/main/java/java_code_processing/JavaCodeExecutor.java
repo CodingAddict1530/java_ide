@@ -1,9 +1,12 @@
 package java_code_processing;
 
 import custom_classes.ConsoleTextArea;
+import custom_classes.RootTreeNode;
 
 import javax.tools.*;
 import java.io.*;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -15,30 +18,59 @@ public class JavaCodeExecutor {
     // 1 Couldn't read file
     // 2 Compilation failed
     // 3 Couldn't delete
-    public static int run(File file, ConsoleTextArea textArea) {
+    public static int run(File file, ConsoleTextArea textArea, RootTreeNode project) {
 
         int returnValue = 0;
         String sourceCode = readSourceFile(file);
         if (sourceCode == null) {
             return 1;
         }
+        Path buildPath;
+        if (project == null) {
+            buildPath = null;
+        } else {
+            buildPath = new File(project.getPath().toString(), "bin").toPath();
+        }
 
-        boolean compile = compile(sourceCode, file, textArea);
-        String[] parts = file.getName().split("\\.");
+        boolean compile = compile(sourceCode, file, textArea, (buildPath == null) ? null :
+                buildPath.toString());
         if (compile) {
             setUpInputHandling(textArea);
-            execute(parts[0], textArea);
+            execute(file, textArea, buildPath);
         } else {
             returnValue = 2;
         }
         return returnValue;
     }
 
-    private static void execute(String name, ConsoleTextArea textArea) {
+    private static void execute(File file, ConsoleTextArea textArea, Path buildPath) {
+
+        String[] parts1 = file.getName().split("\\.");
+        String[] parts2 = file.getPath().split("\\\\");
+        ArrayList<String> fromSrc = new ArrayList<>();
+        boolean start = false;
+        for (String part : parts2) {
+            if (part.equals("src") || start) {
+                if (start) {
+                    fromSrc.add(part);
+                }
+                start = true;
+            }
+        }
+        if (fromSrc.isEmpty() && buildPath != null) {
+            System.out.println("File not in src!");
+            return;
+        }
+        fromSrc.remove(fromSrc.size() - 1);
+        StringBuilder filePath = new StringBuilder();
+        for (String part : fromSrc) {
+            filePath.append(part).append(".");
+        }
 
         ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp",
-                ".", name);
-        processBuilder.directory(new File("src/main/classes"));
+                ".", (filePath.isEmpty()) ? parts1[0] : filePath + parts1[0]);
+        processBuilder.directory((buildPath == null) ? new File("src/main/classes") :
+                buildPath.toFile());
         processBuilder.redirectErrorStream(true);
 
         try {
@@ -70,7 +102,9 @@ public class JavaCodeExecutor {
                     int exitCode = process.waitFor();
                     outputThread.join();
                     javafx.application.Platform.runLater(() -> textArea.appendText("\nProcess Finished with exit code " + exitCode + "\n"));
-                    new File("src/main/classes/" + name + ".class").delete();
+                    if (buildPath == null) {
+                        new File("src/main/classes/" + parts1[0] + ".class").delete();
+                    }
                 } catch (Exception e) {
                     System.out.println(e.getMessage());
                 }
@@ -120,7 +154,8 @@ public class JavaCodeExecutor {
 
     }
 
-    private static boolean compile(String sourceCode,  File file, ConsoleTextArea textArea) {
+    private static boolean compile(String sourceCode,  File file, ConsoleTextArea textArea,
+                                   String buildPath) {
 
         // Get compiler
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -155,7 +190,9 @@ public class JavaCodeExecutor {
 
         // Compile
         JavaCompiler.CompilationTask task = compiler.getTask(stdOut, fileManager,
-                diagnostics, Arrays.asList("-d", "src/main/classes"), null, Collections.singleton(fileObject));
+                diagnostics, Arrays.asList("-d",
+                        (buildPath != null) ?  buildPath : "src/main/classes"),
+                null, Collections.singleton(fileObject));
 
         boolean result = task.call();
 

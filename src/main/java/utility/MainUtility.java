@@ -1,9 +1,15 @@
 package utility;
 
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.TextInputDialog;
+import managers.FileManager;
+
 import java.io.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Optional;
 
 public class MainUtility {
 
@@ -12,7 +18,6 @@ public class MainUtility {
 
     // 1 Failed to write
     // 2 Failed to make readonly
-    // 3 Failed to write and make readonly
     public static int writeOpenData(Path path, boolean readOnly) {
 
         File file = path.toFile();
@@ -20,50 +25,44 @@ public class MainUtility {
             return 1;
         }
 
-        int returnValue = 0;
-
-        try (DataOutputStream out = new DataOutputStream(new FileOutputStream(path.toString()))) {
-            if (!openFilesPaths.isEmpty() && openProjectPath.get(0) != null) {
-                out.writeUTF(openProjectPath.get(0).toString());
-                out.writeChar('\n');
-            }
-            for (Path p : openFilesPaths) {
-                out.writeUTF(p.toString());
-                out.writeChar('\n');
-            }
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
-            returnValue = 1;
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(openProjectPath.get(0).toString()).append("\n");
+        for (Path filePath : openFilesPaths) {
+            stringBuilder.append(filePath.toString()).append("\n");
         }
-
-
-        if (readOnly) {
-
-            if (!file.setReadOnly()) {
-                if (returnValue == 1) {
-                    returnValue = 3;
-                } else {
-                    returnValue = 2;
+        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+        boolean result = FileManager.writeToFile(path, stringBuilder.toString(), true, false);
+        if (result) {
+            if (readOnly) {
+                if (!file.setReadOnly()) {
+                    return 2;
                 }
             }
+            return 0;
+        } else {
+            return 1;
         }
 
-        return returnValue;
     }
 
-    public static ArrayList<Path> read(Path path) {
+    public static ArrayList<Path> readOpenData(Path path) {
 
+        ArrayList<String> lines = FileManager.readFile(path);
         ArrayList<Path> returnValue = new ArrayList<>();
-        try (DataInputStream in = new DataInputStream(new FileInputStream(path.toString()))) {
-            while (in.available() > 0) {
-                returnValue.add(Paths.get(in.readUTF()));
-                in.readChar();
+        boolean valid = true;
+        if (lines != null) {
+            for (String s : lines) {
+                if (new File(s).exists()) {
+                    returnValue.add(Paths.get(s));
+                } else {
+                    valid = false;
+                }
             }
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
+        } else {
+            valid = false;
         }
 
-        return (returnValue.isEmpty()) ? null : returnValue;
+        return (valid ? returnValue : null);
 
     }
 
@@ -75,6 +74,42 @@ public class MainUtility {
     public static void setOpenFilesPaths(ArrayList<Path> openFilesPaths) {
 
         MainUtility.openFilesPaths = openFilesPaths;
+    }
+
+    public static boolean checkAndFix() {
+
+        String home = System.getProperty("user.home");
+        File appHome = new File(home, "NotAnIDE_Projects");
+        if (!appHome.exists()) {
+            return appHome.mkdir();
+        }
+
+        return true;
+
+    }
+
+    public static String quickDialog(String title, String text) {
+
+        final String[] output = new String[1];
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle(title);
+        dialog.setHeaderText(text);
+        dialog.setGraphic(null);
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(userInput -> output[0] = userInput);
+        return output[0];
+
+    }
+
+    public static boolean confirm(String title, String text) {
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(text);
+        Optional<ButtonType> result = alert.showAndWait();
+        return (result.isPresent() && result.get() == ButtonType.OK);
+
     }
 
 }

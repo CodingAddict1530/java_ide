@@ -72,10 +72,11 @@ public class EditAreaUtility {
             "try",
             "void",
             "volatile",
-            "while"
+            "while",
+            "@interface"
     ));
 
-    private static Integer moveCaret;
+    private static Integer moveCaret = 0;
     private static ArrayList<Tab> tabs;
     private static ArrayList<Path> filePaths;
     private static ArrayList<Boolean> saved;
@@ -182,7 +183,7 @@ public class EditAreaUtility {
                     textArea.moveTo(textArea.getCaretPosition() - moveCaret);
                     moveCaret = 0;
                 }
-                if (textArea.getText().length() > 2 &&
+                if (textArea.getCaretPosition() >= 2 && textArea.getText().length() > 2 &&
                         textArea.getText().charAt(textArea.getCaretPosition() - 2) == '*' &&
                         textArea.getText().charAt(textArea.getCaretPosition()) == '*') {
                     textArea.replaceText(textArea.getCaretPosition(), textArea.getCaretPosition(), "\n ");
@@ -390,6 +391,13 @@ public class EditAreaUtility {
     public static void addAccelerator(MenuItem menuItem, KeyCode keyCode) {
 
         KeyCombination newComb = new KeyCodeCombination(keyCode, KeyCombination.CONTROL_DOWN);
+        menuItem.setAccelerator(newComb);
+
+    }
+
+    public static void addAccelerator(MenuItem menuItem, KeyCode keyCode, KeyCombination.Modifier... modifier) {
+
+        KeyCombination newComb = new KeyCodeCombination(keyCode, modifier);
         menuItem.setAccelerator(newComb);
 
     }

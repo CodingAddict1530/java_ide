@@ -26,12 +26,13 @@ public class Application extends javafx.application.Application {
         stage.setScene(scene);
         ArrayList<Path> previousContent = null;
         try {
-            previousContent = MainUtility.read(Paths.get("src/main/files/records.dat"));
+            previousContent = MainUtility.readOpenData(Paths.get("src/main/files/records.dat"));
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
         Controller controller = fxmlLoader.getController();
         controller.addPreviousContent(previousContent);
+        MainUtility.checkAndFix();
         stage.show();
     }
 

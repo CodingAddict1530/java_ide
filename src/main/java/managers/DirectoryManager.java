@@ -2,10 +2,8 @@ package managers;
 
 import custom_classes.*;
 import javafx.geometry.Pos;
-import javafx.scene.control.Label;
-import javafx.scene.control.TabPane;
-import javafx.scene.control.TreeItem;
-import javafx.scene.control.TreeView;
+import javafx.scene.control.*;
+import javafx.scene.input.Clipboard;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -14,13 +12,11 @@ import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeRegular;
 import org.kordamp.ikonli.javafx.FontIcon;
+import utility.MainUtility;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,8 +29,10 @@ public class DirectoryManager {
     private static TabPane tabPane;
     private static ArrayList<Path> openProjectPath;
     private static VBox projectView;
+    private static Clipboard clipboard;
+    private static ArrayList<Boolean> shouldCut;
 
-    public static void openProject(Path path) {
+    public static Path openProject(Path path) {
 
         File dir;
         if (path == null) {
@@ -61,6 +59,8 @@ public class DirectoryManager {
             }
 
         }
+
+        return (dir != null) ? dir.toPath() : null;
 
     }
 
@@ -116,7 +116,7 @@ public class DirectoryManager {
         FontIcon icon = new FontIcon(FontAwesomeRegular.FOLDER_OPEN);
         icon.setIconColor(Color.RED);
         hBox.getChildren().add(icon);
-        hBox.getChildren().add(new Label("  " + root.getName()));
+        hBox.getChildren().add(new CustomTreeLabel("  " + root.getName(), root.getPath()));
         hBox.setAlignment(Pos.CENTER_LEFT);
         CustomTreeItem<HBox> rootItem = new CustomTreeItem<>(hBox, root.getPath());
         rootItem.setExpanded(true);
@@ -130,6 +130,80 @@ public class DirectoryManager {
                     FileManager.openFile(item.getPath());
                 }
             }
+        });
+
+        treeView.setCellFactory(tv -> new TreeCell<>() {
+
+            @Override
+            protected void updateItem(HBox item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setContextMenu(null);
+                } else {
+                    FontIcon icon = (FontIcon) item.getChildren().get(0);
+                    CustomTreeLabel label = (CustomTreeLabel) item.getChildren().get(1);
+                    Path path = label.getPath();
+                    setGraphic(item);
+
+                    ContextMenu contextMenu = new ContextMenu();
+                    if (icon.getIconCode() == FontAwesomeRegular.FOLDER_OPEN) {
+                        Menu newItem = new Menu("New");
+
+                        Menu fileItem = new Menu("Java File");
+
+                        MenuItem classItem = new MenuItem("Class");
+                        classItem.setOnAction(event -> FileManager.newJavaClass(path));
+                        MenuItem abstractClassItem = new MenuItem("Abstract Class");
+                        abstractClassItem.setOnAction(event -> FileManager.newJavaAbstractClass(path));
+                        MenuItem interfaceItem = new MenuItem("Interface");
+                        interfaceItem.setOnAction(event -> FileManager.newJavaInterface(path));
+                        MenuItem recordItem = new MenuItem("Record");
+                        recordItem.setOnAction(event -> FileManager.newJavaRecord(path));
+                        MenuItem enumItem = new MenuItem("Enum");
+                        enumItem.setOnAction(event -> FileManager.newJavaEnum(path));
+                        MenuItem annotationItem = new MenuItem("Annotation");
+                        annotationItem.setOnAction(event -> FileManager.newJavaAnnotation(path));
+
+                        fileItem.getItems().addAll(classItem, abstractClassItem, interfaceItem,
+                                recordItem, enumItem, annotationItem);
+
+                        MenuItem packageItem = new MenuItem("Package");
+                        packageItem.setOnAction(event -> newPackage(path));
+
+                        newItem.getItems().addAll(fileItem, packageItem);
+
+                        MenuItem deleteItem = new MenuItem("Delete");
+                        deleteItem.setOnAction(event -> DirectoryManager.deleteDirectory(path));
+                        MenuItem cutItem = new MenuItem("Cut");
+                        cutItem.setOnAction(event -> DirectoryManager.cutDirectory(path));
+                        MenuItem copyItem = new MenuItem("Copy");
+                        copyItem.setOnAction(event -> DirectoryManager.copyDirectory(path));
+                        MenuItem pasteItem = new MenuItem("Paste");
+                        pasteItem.setOnAction(event -> DirectoryManager.pasteIntoDirectory(path));
+                        MenuItem renameItem = new MenuItem("Rename");
+                        renameItem.setOnAction(event -> DirectoryManager.renameDirectory(path));
+                        contextMenu.getItems().addAll(newItem, deleteItem, cutItem, copyItem, pasteItem, renameItem);
+                    } else {
+                        MenuItem runItem = new MenuItem("Run");
+                        runItem.setOnAction(event -> FileManager.runFile(path));
+                        MenuItem deleteItem = new MenuItem("Delete");
+                        deleteItem.setOnAction(event -> FileManager.deleteFile(path, false));
+                        MenuItem cutItem = new MenuItem("Cut");
+                        cutItem.setOnAction(event -> FileManager.cutFile(path, true));
+                        MenuItem copyItem = new MenuItem("Copy");
+                        copyItem.setOnAction(event -> FileManager.copyFile(path));
+                        MenuItem pasteItem = new MenuItem("Paste");
+                        pasteItem.setOnAction(event -> FileManager.pasteIntoFile(path));
+                        MenuItem renameItem = new MenuItem("Rename");
+                        renameItem.setOnAction(event -> FileManager.renameFile(path));
+                        contextMenu.getItems().addAll(runItem, deleteItem, cutItem, copyItem, pasteItem, renameItem);
+                    }
+
+                    setContextMenu(contextMenu);
+                }
+            }
+
         });
         return treeView;
 
@@ -148,7 +222,7 @@ public class DirectoryManager {
             icon.setIconColor((childNode instanceof DirectoryTreeNode) ? Color.GREEN :
                     (Objects.equals(parts[parts.length - 1], "java")) ? Color.PURPLE : Color.GRAY);
             hBox.getChildren().add(icon);
-            hBox.getChildren().add(new Label("  " + childNode.getName()));
+            hBox.getChildren().add(new CustomTreeLabel("  " + childNode.getName(), childNode.getPath()));
             hBox.setAlignment(Pos.CENTER_LEFT);
             CustomTreeItem<HBox> childItem = new CustomTreeItem<>(hBox, childNode.getPath());
             childItem.setExpanded(true);
@@ -158,6 +232,103 @@ public class DirectoryManager {
             }
 
         }
+    }
+
+    public static void newPackage(Path path) {
+
+        String name = MainUtility.quickDialog("New package", "Enter package name");
+        if (name == null) {
+            return;
+        }
+        File dir = new File(path.toString(), name);
+        if (!dir.exists()) {
+            dir.mkdir();
+        } else {
+            System.out.println("Package already exists");
+        }
+        ProjectManager.openProject(openProjectPath.get(0));
+
+    }
+
+    public static void deleteDirectory(Path path) {
+
+        boolean confirm = MainUtility.confirm("Delete " + path.getFileName(), "This package and all contents will be deleted!");
+        if (confirm) {
+            File dir = new File(path.toString());
+            try {
+                recursiveDelete(dir.toPath());
+            } catch (IOException e) {
+                System.out.println(e.getMessage());
+            }
+        }
+        ProjectManager.openProject(openProjectPath.get(0));
+
+    }
+
+    public static void cutDirectory(Path path) {
+
+        FileManager.cutFile(path, true);
+    }
+
+    public static void copyDirectory(Path path) {
+
+        FileManager.copyFile(path);
+    }
+
+    public static void pasteIntoDirectory(Path path) {
+
+        if (clipboard.hasString()) {
+            String content = clipboard.getString();
+            File potentialFile = new File(content);
+            if (!potentialFile.exists()) {
+                System.out.println("No file or directory copied!");
+                return;
+            }
+            File newFile = new File(path.toString(), potentialFile.getName());
+            try {
+                if (newFile.exists()) {
+                    boolean confirm = MainUtility.confirm("File or directory already exists", "This file is already exists, overwriting it?");
+                    if (confirm) {
+                        if (shouldCut.get(0)) {
+                            Files.move(potentialFile.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        } else {
+                            ArrayList<String> newContent = FileManager.readFile(potentialFile.toPath());
+                            if (newContent == null) {
+                                newFile.mkdir();
+                            } else {
+                                Files.write(newFile.toPath(), newContent);
+                            }
+
+                        }
+                    }
+                } else {
+                    Files.move(potentialFile.toPath(), newFile.toPath());
+                }
+            } catch (IOException e) {
+                System.out.println(e.getMessage());
+            }
+
+        }
+        ProjectManager.openProject(openProjectPath.get(0));
+
+    }
+
+    public static void renameDirectory(Path path) {
+
+        FileManager.renameFile(path);
+    }
+
+    public static void recursiveDelete(Path path) throws IOException {
+
+        if (Files.isDirectory(path)) {
+            try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(path)) {
+                for (Path item : directoryStream) {
+                    recursiveDelete(item);
+                }
+            }
+        }
+        Files.delete(path);
+
     }
 
     public static void setDirectoryChooser(DirectoryChooser directoryChooser) {
@@ -178,5 +349,15 @@ public class DirectoryManager {
     public static void setProjectView(VBox projectView) {
 
         DirectoryManager.projectView = projectView;
+    }
+
+    public static void setClipboard(Clipboard clipboard) {
+
+        DirectoryManager.clipboard = clipboard;
+    }
+
+    public static void setShouldCut(ArrayList<Boolean> shouldCut) {
+
+        DirectoryManager.shouldCut = shouldCut;
     }
 }

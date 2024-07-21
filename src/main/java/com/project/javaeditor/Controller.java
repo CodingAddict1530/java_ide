@@ -1,5 +1,6 @@
 package com.project.javaeditor;
 
+import custom_classes.RootTreeNode;
 import custom_classes.SettingsResult;
 import java_code_processing.JavaCodeExecutor;
 import javafx.fxml.FXML;
@@ -17,6 +18,7 @@ import javafx.stage.FileChooser;
 import custom_classes.ConsoleTextArea;
 import managers.DirectoryManager;
 import managers.FileManager;
+import managers.ProjectManager;
 import managers.TextManager;
 import org.fxmisc.richtext.InlineCssTextArea;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -50,7 +52,11 @@ public class Controller implements Initializable {
     @FXML
     private MenuItem paste;
     @FXML
+    private MenuItem newProject;
+    @FXML
     private MenuItem openProject;
+    @FXML
+    private MenuItem deleteProject;
     @FXML
     private VBox projectView;
     @FXML
@@ -69,6 +75,8 @@ public class Controller implements Initializable {
     private final DirectoryChooser directoryChooser = new DirectoryChooser();
     private final ArrayList<Path> openProjectPath = new ArrayList<>();
     private final ArrayList<Path> openFilesPaths = new ArrayList<>();
+    private static final Clipboard clipboard = Clipboard.getSystemClipboard();
+    private static ArrayList<Boolean> shoudlCut = new ArrayList<>();
     private SettingsResult settingsResult;
 
     @FXML
@@ -84,7 +92,8 @@ public class Controller implements Initializable {
         addAccelerator(cut, KeyCode.X);
         addAccelerator(copy, KeyCode.C);
         addAccelerator(paste, KeyCode.V);
-        addAccelerator(openProject, KeyCode.P);
+        addAccelerator(newProject, KeyCode.N, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN);
+        addAccelerator(openProject, KeyCode.O, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN);
 
         footer.setAlignment(Pos.CENTER);
         FontIcon runIcon = new FontIcon(FontAwesomeSolid.PLAY);
@@ -133,10 +142,28 @@ public class Controller implements Initializable {
     }
 
     @FXML
+    public void newProject() {
+
+        String output = MainUtility.quickDialog("New Project", "Enter project name");
+        if (output == null) {
+            return;
+        }
+
+        RootTreeNode project = ProjectManager.createProject(output);
+        FileManager.closeAll();
+        ProjectManager.openProject(project.getPath());
+
+    }
+
+    @FXML
     public void openProject() {
 
-        DirectoryManager.openProject(null);
+        FileManager.closeAll();
+        ProjectManager.openProject(null);
     }
+
+    @FXML
+    public void deleteProject() {}
 
     @FXML
     public void copy() {
@@ -159,7 +186,7 @@ public class Controller implements Initializable {
     public void addPreviousContent(ArrayList<Path> paths) {
 
         if (paths != null) {
-            DirectoryManager.openProject(paths.get(0));
+            ProjectManager.openProject(paths.get(0));
             if (paths.size() > 1) {
                 paths.remove(0);
                 for (Path file : paths) {
@@ -235,7 +262,7 @@ public class Controller implements Initializable {
         consoleTextArea.unprotectText();
         consoleTextArea.replaceText("");
         consoleTextArea.protectText();
-        System.out.println(JavaCodeExecutor.run(file, consoleTextArea));
+        System.out.println(JavaCodeExecutor.run(file, consoleTextArea, ProjectManager.getCurrentProject()));
 
     }
 
@@ -247,13 +274,21 @@ public class Controller implements Initializable {
         FileManager.setSaved(saved);
         FileManager.setOpenFilesPaths(openFilesPaths);
         FileManager.setTabPane(tabPane);
+        FileManager.setConsole(console);
+        FileManager.setVerticalSplitPane(verticalSplitPane);
+        FileManager.setOpenProjectPath(openProjectPath);
+        FileManager.setClipboard(clipboard);
+        FileManager.setShouldCut(shoudlCut);
 
         DirectoryManager.setDirectoryChooser(directoryChooser);
         DirectoryManager.setOpenProjectPath(openProjectPath);
         DirectoryManager.setProjectView(projectView);
         DirectoryManager.setTabPane(tabPane);
+        DirectoryManager.setClipboard(clipboard);
+        DirectoryManager.setShouldCut(shoudlCut);
 
         TextManager.setTabPane(tabPane);
+        TextManager.setClipboard(clipboard);
 
         SettingsUtility.setDirectoryChooser(directoryChooser);
         SettingsUtility.setTabPane(tabPane);
