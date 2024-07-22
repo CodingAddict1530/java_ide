@@ -1,6 +1,7 @@
-package managers;
+package com.project.managers;
 
-import custom_classes.*;
+import com.project.custom_classes.*;
+import com.project.javaeditor.Application;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.input.Clipboard;
@@ -10,9 +11,11 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeRegular;
 import org.kordamp.ikonli.javafx.FontIcon;
-import utility.MainUtility;
+import com.project.utility.MainUtility;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,6 +27,8 @@ import java.util.Map;
 import java.util.Objects;
 
 public class DirectoryManager {
+
+    private static final Logger logger = LogManager.getLogger(DirectoryManager.class);
 
     private static DirectoryChooser directoryChooser;
     private static TabPane tabPane;
@@ -37,7 +42,12 @@ public class DirectoryManager {
         File dir;
         if (path == null) {
             directoryChooser.setTitle("Select a Directory");
-            directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+            if (ProjectManager.APP_HOME.exists()) {
+                directoryChooser.setInitialDirectory(ProjectManager.APP_HOME);
+            } else {
+                directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+            }
+
             dir = directoryChooser.showDialog(tabPane.getScene().getWindow());
         } else {
             dir = path.toFile();
@@ -58,6 +68,8 @@ public class DirectoryManager {
                 VBox.setVgrow(treeView, Priority.ALWAYS);
             }
 
+        } else {
+            logger.info("Couldn't open directory: {}", (dir == null) ? "\u0000" : dir.getPath());
         }
 
         return (dir != null) ? dir.toPath() : null;
@@ -67,8 +79,8 @@ public class DirectoryManager {
     public static RootTreeNode parseDirectory(Path path) {
 
         RootTreeNode rootDirectory = new RootTreeNode(path);
-        System.out.println(!Files.exists(path));
         if (!Files.exists(path) || !Files.isDirectory(path)) {
+            logger.error("Couldn't open directory: {}", path.toString());
             return null;
         }
         Map<Path, DirectoryTreeNode> pathMap = new HashMap<>();
@@ -78,7 +90,7 @@ public class DirectoryManager {
             Files.walkFileTree(path, new SimpleFileVisitor<>() {
 
                 @Override
-                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs){
+                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs) {
 
                     DirectoryTreeNode parent = pathMap.get(filePath.getParent());
                     FileTreeNode file = new FileTreeNode(filePath, parent);
@@ -101,9 +113,8 @@ public class DirectoryManager {
                 }
 
             });
-        } catch (IOException e) {
-
-            System.out.println(e.getMessage());
+        } catch (IOException | SecurityException e) {
+            logger.error(e);
         }
 
         return rootDirectory;
@@ -242,7 +253,9 @@ public class DirectoryManager {
         }
         File dir = new File(path.toString(), name);
         if (!dir.exists()) {
-            dir.mkdir();
+            if (dir.mkdir()) {
+                logger.info("Package {} created", dir.getName());
+            }
         } else {
             System.out.println("Package already exists");
         }
@@ -252,13 +265,14 @@ public class DirectoryManager {
 
     public static void deleteDirectory(Path path) {
 
-        boolean confirm = MainUtility.confirm("Delete " + path.getFileName(), "This package and all contents will be deleted!");
+        boolean confirm = MainUtility.confirm("Delete " + path.getFileName(), "This directory and all contents will be deleted!");
         if (confirm) {
             File dir = new File(path.toString());
             try {
                 recursiveDelete(dir.toPath());
+                logger.info("Directory {} deleted", dir.getName());
             } catch (IOException e) {
-                System.out.println(e.getMessage());
+                logger.error(e);
             }
         }
         ProjectManager.openProject(openProjectPath.get(0));
@@ -291,21 +305,26 @@ public class DirectoryManager {
                     if (confirm) {
                         if (shouldCut.get(0)) {
                             Files.move(potentialFile.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            logger.info("{} moved to {}", potentialFile.getName(), newFile.getName());
                         } else {
                             ArrayList<String> newContent = FileManager.readFile(potentialFile.toPath());
                             if (newContent == null) {
-                                newFile.mkdir();
+                                if (newFile.mkdir()) {
+                                    logger.info("{} created", newFile.getName());
+                                }
                             } else {
                                 Files.write(newFile.toPath(), newContent);
+                                logger.info("{} created", newFile.getName());
                             }
 
                         }
                     }
                 } else {
                     Files.move(potentialFile.toPath(), newFile.toPath());
+                    logger.info("{} moved to {}", potentialFile.getName(), newFile.getName());
                 }
             } catch (IOException e) {
-                System.out.println(e.getMessage());
+                logger.error(e);
             }
 
         }

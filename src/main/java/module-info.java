@@ -11,12 +11,14 @@ module com.project.javaeditor {
     requires com.dlsc.formsfx;
     requires net.synedra.validatorfx;
     requires org.kordamp.bootstrapfx.core;
-    requires eu.hansolo.tilesfx;
     requires java.compiler;
+    requires org.apache.logging.log4j.core;
+    requires org.eclipse.lsp4j;
+    requires org.eclipse.lsp4j.jsonrpc;
 
     opens com.project.javaeditor to javafx.fxml;
     exports com.project.javaeditor;
-    exports utility;
-    exports managers;
-    exports custom_classes;
+    exports com.project.utility;
+    exports com.project.managers;
+    exports com.project.custom_classes;
 }

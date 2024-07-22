@@ -1,7 +1,7 @@
-package utility;
+package com.project.utility;
 
-import custom_classes.SettingsResult;
-import custom_classes.Theme;
+import com.project.custom_classes.SettingsResult;
+import com.project.custom_classes.Theme;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 import javafx.stage.DirectoryChooser;

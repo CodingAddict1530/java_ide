@@ -1,0 +1,64 @@
+<Configuration status="warn">
+    <Appenders>
+        <Console name="ConsoleLogger">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </Console>
+
+        <!-- File appenders for different packages -->
+        <File name="FatalFileAppender" fileName="logs/fatal-errors.log">
+            <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c - %m%n"/>
+        </File>
+
+        <File name="JavaEditorFileLogger" fileName="logs/javaEditor.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+
+        <File name="CustomClassesFileLogger" fileName="logs/custom_classes.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+
+        <File name="JavaCodeProcessingFileLogger" fileName="logs/java_code_processing.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+
+        <File name="ManagersFileLogger" fileName="logs/managers.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+
+        <File name="UtilityFileLogger" fileName="logs/utility.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+    </Appenders>
+    <Loggers>
+        <Root level="warn">
+            <AppenderRef ref="ConsoleLogger"/>
+        </Root>
+
+        <!-- Custom loggers for each package -->
+        <Logger name="com.project" level="fatal" additivity="false">
+            <AppenderRef ref="ConsoleLogger"/>
+            <AppenderRef ref="FatalFileAppender"/>
+        </Logger>
+
+        <Logger name="com.project.javaeditor" level="debug" additivity="false">
+            <AppenderRef ref="ConsoleLogger"/>
+            <AppenderRef ref="JavaEditorFileLogger"/>
+        </Logger>
+
+        <Logger name="custom_classes" level="debug" additivity="false">
+            <AppenderRef ref="CustomClassesFileLogger"/>
+        </Logger>
+
+        <Logger name="java_code_processing" level="debug" additivity="false">
+            <AppenderRef ref="JavaCodeProcessingFileLogger"/>
+        </Logger>
+
+        <Logger name="managers" level="debug" additivity="false">
+            <AppenderRef ref="ManagersFileLogger"/>
+        </Logger>
+
+        <Logger name="utility" level="debug" additivity="false">
+            <AppenderRef ref="UtilityFileLogger"/>
+        </Logger>
+    </Loggers>
+</Configuration>

@@ -1,9 +1,12 @@
-package utility;
+package com.project.utility;
 
+import com.project.javaeditor.Application;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.TextInputDialog;
-import managers.FileManager;
+import com.project.managers.FileManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.*;
 import java.nio.file.Path;
@@ -12,6 +15,8 @@ import java.util.ArrayList;
 import java.util.Optional;
 
 public class MainUtility {
+
+    private static final Logger logger = LogManager.getLogger(MainUtility.class);
 
     private static ArrayList<Path> openProjectPath;
     private static ArrayList<Path> openFilesPaths;
@@ -22,6 +27,7 @@ public class MainUtility {
 
         File file = path.toFile();
         if (file.exists() && !file.setWritable(true)) {
+            logger.info("File {} already exists, or not writable", file.getPath());
             return 1;
         }
 
@@ -33,13 +39,16 @@ public class MainUtility {
         stringBuilder.deleteCharAt(stringBuilder.length() - 1);
         boolean result = FileManager.writeToFile(path, stringBuilder.toString(), true, false);
         if (result) {
+            logger.info("File {} successfully written", file.getPath());
             if (readOnly) {
                 if (!file.setReadOnly()) {
+                    logger.info("Failed to make {} read-only", file.getPath());
                     return 2;
                 }
             }
             return 0;
         } else {
+            logger.info("Failed to write to {}", file.getPath());
             return 1;
         }
 
@@ -66,22 +75,18 @@ public class MainUtility {
 
     }
 
-    public static void setOpenProjectPath(ArrayList<Path> openProjectPath) {
-
-        MainUtility.openProjectPath = openProjectPath;
-    }
-
-    public static void setOpenFilesPaths(ArrayList<Path> openFilesPaths) {
-
-        MainUtility.openFilesPaths = openFilesPaths;
-    }
-
     public static boolean checkAndFix() {
 
         String home = System.getProperty("user.home");
         File appHome = new File(home, "NotAnIDE_Projects");
         if (!appHome.exists()) {
-            return appHome.mkdir();
+            if (appHome.mkdir()) {
+                logger.info("App home directory created");
+                return true;
+            } else {
+                logger.error("App home directory could not be created");
+                return false;
+            }
         }
 
         return true;
@@ -110,6 +115,16 @@ public class MainUtility {
         Optional<ButtonType> result = alert.showAndWait();
         return (result.isPresent() && result.get() == ButtonType.OK);
 
+    }
+
+    public static void setOpenProjectPath(ArrayList<Path> openProjectPath) {
+
+        MainUtility.openProjectPath = openProjectPath;
+    }
+
+    public static void setOpenFilesPaths(ArrayList<Path> openFilesPaths) {
+
+        MainUtility.openFilesPaths = openFilesPaths;
     }
 
 }

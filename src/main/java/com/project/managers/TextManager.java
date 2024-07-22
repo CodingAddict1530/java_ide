@@ -1,4 +1,4 @@
-package managers;
+package com.project.managers;
 
 import javafx.scene.control.TabPane;
 import javafx.scene.input.Clipboard;

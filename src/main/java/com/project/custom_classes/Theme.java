@@ -1,4 +1,4 @@
-package custom_classes;
+package com.project.custom_classes;
 
 public enum Theme {
 

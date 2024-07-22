@@ -1,11 +1,16 @@
-package managers;
+package com.project.managers;
 
-import custom_classes.RootTreeNode;
+import com.project.custom_classes.RootTreeNode;
+import com.project.utility.MainUtility;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.nio.file.Path;
 
 public class ProjectManager {
+
+    private static final Logger logger = LogManager.getLogger(ProjectManager.class);
 
     public static final File APP_HOME = new File(System.getProperty("user.home"), "NotAnIDE_Projects");
     private static RootTreeNode currentProject;
@@ -20,8 +25,9 @@ public class ProjectManager {
         if (!projectDir.exists()) {
             if (projectDir.mkdir()) {
                 projectRoot = new RootTreeNode(projectDir.toPath());
+                logger.info("Project directory created: {}", projectDir.getAbsolutePath());
             } else {
-                System.out.println("Failed to create project directory");
+                logger.warn("Failed to create project directory: {}", projectDir.getAbsolutePath());
             }
         } else {
             System.out.println("Project directory already exists");
@@ -31,9 +37,9 @@ public class ProjectManager {
             File directory = new File(projectDir, dir);
             if (!directory.exists()) {
                 if (directory.mkdir()) {
-                    System.out.println("Project directory: " + dir + " created");
+                    logger.info("Created {} in {}", dir, projectDir.getAbsolutePath());
                 } else {
-                    System.out.println("Failed to create project directory: " + dir);
+                    logger.warn("Failed to create {} in {}", dir, projectDir.getAbsolutePath());
                 }
             }
         }
@@ -61,6 +67,17 @@ public class ProjectManager {
         } else {
             currentProject = null;
         }
+
+    }
+
+    public static void deleteProject() {
+
+        Path path = currentProject.getPath();
+        if (MainUtility.confirm("Delete "+ path.getFileName(), "This entire project will be deleted")) {
+            currentProject = null;
+            DirectoryManager.deleteDirectory(path);
+        }
+        openProject(APP_HOME.toPath());
 
     }
 

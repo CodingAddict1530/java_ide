@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id 'org.javamodularity.moduleplugin' version '1.8.12'
+    id "org.gradlex.extra-java-module-info"  version "1.8"
     id 'org.openjfx.javafxplugin' version '0.0.13'
     id 'org.beryx.jlink' version '2.25.0'
 }
@@ -15,6 +16,18 @@ repositories {
 
 ext {
     junitVersion = '5.10.0'
+}
+
+extraJavaModuleInfo {
+    failOnMissingModuleInfo = false
+
+    module('org.eclipse.lsp4j.jsonrpc-0.23.1.jar', 'org.eclipse.lsp4j.jsonrpc') {
+        exportAllPackages()
+    }
+    module('org.eclipse.lsp4j-0.23.1.jar', 'org.eclipse.lsp4j') {
+        requires 'org.eclipse.lsp4j.jsonrpc'
+        exportAllPackages()
+    }
 }
 
 java {
@@ -44,19 +57,25 @@ dependencies {
     implementation('net.synedra:validatorfx:0.4.0') {
         exclude(group: 'org.openjfx')
     }
+
+    implementation('org.eclipse.jdt:org.eclipse.jdt.core:3.38.0')
+    implementation('org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1')
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.23.1'
+    implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.23.1'
     implementation group: 'org.fxmisc.richtext', name: 'richtextfx', version: '0.11.3'
     implementation group: 'org.kordamp.ikonli', name: 'ikonli-javafx', version: '12.3.1'
     implementation group: 'org.kordamp.ikonli', name: 'ikonli-fontawesome5-pack', version: '12.3.1'
     implementation('org.kordamp.ikonli:ikonli-javafx:12.3.1')
     implementation('org.kordamp.bootstrapfx:bootstrapfx-core:0.4.0')
-    implementation('eu.hansolo:tilesfx:11.48') {
-        exclude(group: 'org.openjfx')
-    }
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
     testImplementation("org.junit.jupiter:junit-jupiter-params:${junitVersion}")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
 
+}
+
+configurations.configureEach {
+    exclude group: 'org.eclipse.jdt', module: 'org.eclipse.jdt.core'
 }
 
 test {
@@ -73,4 +92,12 @@ jlink {
 
 jlinkZip {
     group = 'distribution'
+}
+
+tasks.register('runJLS', JavaExec) {
+    group = 'Language Server'
+    description = 'Run the JDT Language Server'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = '-jar'
+    args = configurations.runtimeClasspath.find { it.name.contains("org.eclipse.jdt.ls.core") }
 }

@@ -1,7 +1,10 @@
-package java_code_processing;
+package com.project.java_code_processing;
 
-import custom_classes.ConsoleTextArea;
-import custom_classes.RootTreeNode;
+import com.project.custom_classes.ConsoleTextArea;
+import com.project.custom_classes.RootTreeNode;
+import com.project.managers.FileManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import javax.tools.*;
 import java.io.*;
@@ -12,13 +15,19 @@ import java.util.Collections;
 
 public class JavaCodeExecutor {
 
+    private static final Logger logger = LogManager.getLogger(JavaCodeExecutor.class);
+
     private static Process process;
     private static BufferedWriter bufferedWriter;
+
+    private static ConsoleTextArea consoleTextArea;
 
     // 1 Couldn't read file
     // 2 Compilation failed
     // 3 Couldn't delete
-    public static int run(File file, ConsoleTextArea textArea, RootTreeNode project) {
+    public static int run(File file, RootTreeNode project) {
+
+        logger.info("Running {}", file.getAbsolutePath());
 
         int returnValue = 0;
         String sourceCode = readSourceFile(file);
@@ -32,18 +41,49 @@ public class JavaCodeExecutor {
             buildPath = new File(project.getPath().toString(), "bin").toPath();
         }
 
-        boolean compile = compile(sourceCode, file, textArea, (buildPath == null) ? null :
+        boolean compile = compile(sourceCode, file, consoleTextArea, (buildPath == null) ? null :
                 buildPath.toString());
         if (compile) {
-            setUpInputHandling(textArea);
-            execute(file, textArea, buildPath);
+            logger.info("Compilation was successful");
+            consoleTextArea.setOnKeyPressed(event -> {
+
+                if (event.getCode().toString().equals("ENTER")) {
+                    String input = getUserInput(consoleTextArea);
+                    try {
+                        bufferedWriter.write(input + System.lineSeparator());
+                        bufferedWriter.flush();
+                    } catch (Exception e) {
+                        System.out.println(e.getMessage());
+                    }
+                    consoleTextArea.setStyle(consoleTextArea.getCaretPosition(), consoleTextArea.getCaretPosition(),
+                            "-fx-fill: black;");
+                }
+
+            });
+            logger.info("Console input handling setup complete");
+            switch (execute(file, consoleTextArea, buildPath)) {
+                case 0:
+                    logger.info("Execution successful");
+                    break;
+                case 1:
+                    logger.info("File not under src, but in project");
+                    break;
+                case 2:
+                    logger.info("Couldn't delete .class file");
+                    break;
+            }
+            consoleTextArea.setOnKeyPressed(null);
+            logger.info("Console input handling removal complete");
         } else {
             returnValue = 2;
+            logger.info("Compilation failed");
         }
         return returnValue;
     }
 
-    private static void execute(File file, ConsoleTextArea textArea, Path buildPath) {
+    // 1 Not in src and in project
+    // 2 Couldn't delete .class file
+    private static int execute(File file, ConsoleTextArea textArea, Path buildPath) {
 
         String[] parts1 = file.getName().split("\\.");
         String[] parts2 = file.getPath().split("\\\\");
@@ -59,7 +99,7 @@ public class JavaCodeExecutor {
         }
         if (fromSrc.isEmpty() && buildPath != null) {
             System.out.println("File not in src!");
-            return;
+            return 1;
         }
         fromSrc.remove(fromSrc.size() - 1);
         StringBuilder filePath = new StringBuilder();
@@ -67,6 +107,7 @@ public class JavaCodeExecutor {
             filePath.append(part).append(".");
         }
 
+        final int[] returnValue = {0};
         ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp",
                 ".", (filePath.isEmpty()) ? parts1[0] : filePath + parts1[0]);
         processBuilder.directory((buildPath == null) ? new File("src/main/classes") :
@@ -89,7 +130,7 @@ public class JavaCodeExecutor {
                         javafx.application.Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "black"));
                     }
                 } catch (IOException e) {
-                    System.out.println(e.getMessage());
+                    logger.error(e);
                 }
             });
 
@@ -103,10 +144,12 @@ public class JavaCodeExecutor {
                     outputThread.join();
                     javafx.application.Platform.runLater(() -> textArea.appendText("\nProcess Finished with exit code " + exitCode + "\n"));
                     if (buildPath == null) {
-                        new File("src/main/classes/" + parts1[0] + ".class").delete();
+                        if (!new File("src/main/classes/" + parts1[0] + ".class").delete()) {
+                            returnValue[0] = 2;
+                        }
                     }
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
+                } catch (InterruptedException e) {
+                    logger.error(e);
                 }
 
             });
@@ -114,26 +157,9 @@ public class JavaCodeExecutor {
             statusThread.start();
 
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            logger.error(e);
         }
-
-    }
-
-    private static void setUpInputHandling(ConsoleTextArea textArea) {
-
-        textArea.setOnKeyPressed(event -> {
-            if (event.getCode().toString().equals("ENTER")) {
-                String input = getUserInput(textArea);
-                try {
-                    bufferedWriter.write(input + System.lineSeparator());
-                    bufferedWriter.flush();
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
-                }
-                textArea.setStyle(textArea.getCaretPosition(), textArea.getCaretPosition(),
-                        "-fx-fill: black;");
-            }
-        });
+        return returnValue[0];
 
     }
 
@@ -160,7 +186,7 @@ public class JavaCodeExecutor {
         // Get compiler
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
-            System.out.println("No Compiler");
+            logger.info("Java compiler not available");
             return false;
         }
 
@@ -214,15 +240,12 @@ public class JavaCodeExecutor {
     private static String readSourceFile(File file) {
 
         StringBuilder sourceCode = new StringBuilder();
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sourceCode.append(line).append("\n");
-            }
-        } catch (IOException e) {
-            System.out.println(e.getMessage());
+        ArrayList<String> lines = FileManager.readFile(file.toPath());
+        if (lines == null) {
             return null;
+        }
+        for (String line : lines) {
+            sourceCode.append(line).append("\n");
         }
         return sourceCode.toString();
 
@@ -237,4 +260,8 @@ public class JavaCodeExecutor {
 
     }
 
+    public static void setConsoleTextArea(ConsoleTextArea consoleTextArea) {
+
+        JavaCodeExecutor.consoleTextArea = consoleTextArea;
+    }
 }

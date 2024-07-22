@@ -1,8 +1,11 @@
 package com.project.javaeditor;
 
-import custom_classes.RootTreeNode;
-import custom_classes.SettingsResult;
-import java_code_processing.JavaCodeExecutor;
+import com.project.custom_classes.RootTreeNode;
+import com.project.custom_classes.SettingsResult;
+import com.project.java_code_processing.JavaCodeExecutor;
+import com.project.utility.EditAreaUtility;
+import com.project.utility.MainUtility;
+import com.project.utility.SettingsUtility;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
@@ -15,23 +18,22 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
-import custom_classes.ConsoleTextArea;
-import managers.DirectoryManager;
-import managers.FileManager;
-import managers.ProjectManager;
-import managers.TextManager;
-import org.fxmisc.richtext.InlineCssTextArea;
+import com.project.custom_classes.ConsoleTextArea;
+import com.project.managers.DirectoryManager;
+import com.project.managers.FileManager;
+import com.project.managers.ProjectManager;
+import com.project.managers.TextManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 import org.kordamp.ikonli.javafx.FontIcon;
-import utility.*;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.net.URL;
 import java.nio.file.*;
 import java.util.*;
 
-import static utility.EditAreaUtility.addAccelerator;
+import static com.project.utility.EditAreaUtility.addAccelerator;
 
 public class Controller implements Initializable {
 
@@ -68,22 +70,26 @@ public class Controller implements Initializable {
     @FXML
     private HBox console;
 
-    private final ArrayList<Tab> tabs = new ArrayList<>();
-    private final ArrayList<Path> filePaths = new ArrayList<>();
-    private final ArrayList<Boolean> saved = new ArrayList<>();
-    private final FileChooser fileChooser = new FileChooser();
-    private final DirectoryChooser directoryChooser = new DirectoryChooser();
-    private final ArrayList<Path> openProjectPath = new ArrayList<>();
-    private final ArrayList<Path> openFilesPaths = new ArrayList<>();
+    private static final Logger logger = LogManager.getLogger(Controller.class);
+
+    private static final ArrayList<Tab> tabs = new ArrayList<>();
+    private static final ArrayList<Path> filePaths = new ArrayList<>();
+    private static final ArrayList<Boolean> saved = new ArrayList<>();
+    private static final FileChooser fileChooser = new FileChooser();
+    private static final DirectoryChooser directoryChooser = new DirectoryChooser();
+    private static final ArrayList<Path> openProjectPath = new ArrayList<>();
+    private static final ArrayList<Path> openFilesPaths = new ArrayList<>();
     private static final Clipboard clipboard = Clipboard.getSystemClipboard();
-    private static ArrayList<Boolean> shoudlCut = new ArrayList<>();
-    private SettingsResult settingsResult;
+    private static final ArrayList<Boolean> shouldCut = new ArrayList<>();
+    private static SettingsResult settingsResult;
 
     @FXML
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
+        setUpConsole();
         initializeManagers();
+        logger.info("Manager shared attributes set!");
 
         addAccelerator(newFile, KeyCode.N);
         addAccelerator(openFile, KeyCode.O);
@@ -94,6 +100,8 @@ public class Controller implements Initializable {
         addAccelerator(paste, KeyCode.V);
         addAccelerator(newProject, KeyCode.N, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN);
         addAccelerator(openProject, KeyCode.O, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN);
+        addAccelerator(deleteProject, KeyCode.Q, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN);
+        logger.info("Accelerators added");
 
         footer.setAlignment(Pos.CENTER);
         FontIcon runIcon = new FontIcon(FontAwesomeSolid.PLAY);
@@ -104,7 +112,7 @@ public class Controller implements Initializable {
         runBtn.setOnAction(event -> run());
         FontIcon settingsIcon = new FontIcon(FontAwesomeSolid.COG);
         settingsIcon.setIconSize(20);
-        //settingsIcon.setIconColor(Color.GREEN);
+
         Button settingsBtn = new Button();
         settingsBtn.setGraphic(settingsIcon);
         settingsBtn.setOnAction(event -> showSettings());
@@ -113,7 +121,6 @@ public class Controller implements Initializable {
 
         splitPane.setDividerPositions(0.3);
         verticalSplitPane.setDividerPositions(1);
-        setUpConsole();
 
     }
 
@@ -132,7 +139,7 @@ public class Controller implements Initializable {
     @FXML
     public void saveFile() {
 
-        FileManager.saveFile();
+        FileManager.saveFile(null);
     }
 
     @FXML
@@ -163,7 +170,10 @@ public class Controller implements Initializable {
     }
 
     @FXML
-    public void deleteProject() {}
+    public void deleteProject() {
+
+        ProjectManager.deleteProject();
+    }
 
     @FXML
     public void copy() {
@@ -185,16 +195,22 @@ public class Controller implements Initializable {
 
     public void addPreviousContent(ArrayList<Path> paths) {
 
-        if (paths != null) {
-            ProjectManager.openProject(paths.get(0));
-            if (paths.size() > 1) {
-                paths.remove(0);
-                for (Path file : paths) {
-                    FileManager.openFile(file);
+        try {
+            if (paths != null) {
+                ProjectManager.openProject(paths.get(0));
+                if (paths.size() > 1) {
+                    paths.remove(0);
+                    for (Path file : paths) {
+                        FileManager.openFile(file);
+                    }
                 }
+                logger.info("Previous content added");
+            } else {
+                logger.info("No previous content");
+                FileManager.newFile(null, null, true);
             }
-        } else {
-            FileManager.newFile(null, null, true);
+        } catch (IndexOutOfBoundsException e) {
+            logger.error(e);
         }
 
     }
@@ -222,7 +238,7 @@ public class Controller implements Initializable {
 
         HBox.setHgrow(textArea, Priority.ALWAYS);
         console.getChildren().add(textArea);
-
+        logger.info("Console setup complete");
 
     }
 
@@ -241,28 +257,26 @@ public class Controller implements Initializable {
 
         verticalSplitPane.setDividerPositions(0.7);
         Tab tab = tabPane.getSelectionModel().getSelectedItem();
-        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
         File file;
         if (filePaths.get(tabs.indexOf(tab)) == null) {
-            file = new File("src/main/dummy/dummy.java");
-            try {
-                if (file.createNewFile()) {
-                    try (FileWriter writer = new FileWriter(file)) {
-                        writer.write(textArea.getText());
-                    }
-                }
-            } catch (Exception e) {
-                System.out.println(e.getMessage());
-                return;
-            }
-        } else {
-            file = filePaths.get(tabs.indexOf(tab)).toFile();
+            saveFile();
         }
+        file = filePaths.get(tabs.indexOf(tab)).toFile();
         ConsoleTextArea consoleTextArea = (ConsoleTextArea) console.getChildren().get(0);
         consoleTextArea.unprotectText();
         consoleTextArea.replaceText("");
         consoleTextArea.protectText();
-        System.out.println(JavaCodeExecutor.run(file, consoleTextArea, ProjectManager.getCurrentProject()));
+        switch (JavaCodeExecutor.run(file, ProjectManager.getCurrentProject())) {
+            case 1:
+                logger.info("Couldn't read {} to execute", file.getPath());
+                break;
+            case 2:
+                logger.info("Compilation of {} failed", file.getPath());
+                break;
+            case 3:
+                logger.info("Couldn't delete .class file of {}", file.getPath());
+                break;
+        }
 
     }
 
@@ -278,14 +292,14 @@ public class Controller implements Initializable {
         FileManager.setVerticalSplitPane(verticalSplitPane);
         FileManager.setOpenProjectPath(openProjectPath);
         FileManager.setClipboard(clipboard);
-        FileManager.setShouldCut(shoudlCut);
+        FileManager.setShouldCut(shouldCut);
 
         DirectoryManager.setDirectoryChooser(directoryChooser);
         DirectoryManager.setOpenProjectPath(openProjectPath);
         DirectoryManager.setProjectView(projectView);
         DirectoryManager.setTabPane(tabPane);
         DirectoryManager.setClipboard(clipboard);
-        DirectoryManager.setShouldCut(shoudlCut);
+        DirectoryManager.setShouldCut(shouldCut);
 
         TextManager.setTabPane(tabPane);
         TextManager.setClipboard(clipboard);
@@ -300,6 +314,13 @@ public class Controller implements Initializable {
         MainUtility.setOpenFilesPaths(openFilesPaths);
         MainUtility.setOpenProjectPath(openProjectPath);
 
+        JavaCodeExecutor.setConsoleTextArea((ConsoleTextArea) console.getChildren().get(0));
+
+    }
+
+    public ArrayList<Boolean> getSaved() {
+
+        return this.saved;
     }
 
 }

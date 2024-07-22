@@ -1,4 +1,4 @@
-package utility;
+package com.project.utility;
 
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
@@ -9,7 +9,7 @@ import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
-import managers.TextManager;
+import com.project.managers.TextManager;
 import org.fxmisc.richtext.InlineCssTextArea;
 
 import java.nio.file.Path;
@@ -81,8 +81,7 @@ public class EditAreaUtility {
     private static ArrayList<Path> filePaths;
     private static ArrayList<Boolean> saved;
 
-    // **
-    public static void addEventHandlers(InlineCssTextArea textArea, Tab tab) {
+    public static void addEventHandlers(InlineCssTextArea textArea, Tab tab, boolean isColored) {
 
         textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
@@ -193,17 +192,17 @@ public class EditAreaUtility {
             }
 
         });
-        textArea.setOnKeyTyped(event -> {
-
-            if (Character.isLetterOrDigit(event.getCharacter().charAt(0)) && saved.get(tabs.indexOf(tab))) {
+        if (isColored) {
+            textArea.setOnKeyTyped(event -> color(textArea));
+        }
+        textArea.textProperty().addListener((observable, oldValue, newValue) -> {
+            if (!Objects.equals(oldValue, newValue) && saved.get(tabs.indexOf(tab))) {
                 saved.set(tabs.indexOf(tab), false);
                 HBox header = (HBox) tab.getGraphic();
                 header.getChildren().remove(0);
                 header.getChildren().add(0, new Label("* " +
                         filePaths.get(tabs.indexOf(tab)).toFile().getName() + "     "));
             }
-            color(textArea);
-
         });
 
     }
