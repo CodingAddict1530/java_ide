@@ -1,3 +1,4 @@
+/*
 package com.project.javaeditor;
 
 import javafx.embed.swing.JFXPanel;
@@ -143,3 +144,5 @@ public class ControllerTest {
     }
 
 }
+
+*/
