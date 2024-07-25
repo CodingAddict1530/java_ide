@@ -1,19 +1,21 @@
 package com.project.utility;
 
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Label;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.Tab;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyEvent;
+import com.project.managers.JLSManager;
+import javafx.event.EventHandler;
+import javafx.geometry.Point2D;
+import javafx.scene.control.*;
+import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
 import com.project.managers.TextManager;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.Position;
 import org.fxmisc.richtext.InlineCssTextArea;
+import org.fxmisc.richtext.model.TwoDimensional;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -80,9 +82,13 @@ public class EditAreaUtility {
     private static ArrayList<Tab> tabs;
     private static ArrayList<Path> filePaths;
     private static ArrayList<Boolean> saved;
+    private static ArrayList<EventHandler<MouseEvent>> mouseEvents = new ArrayList<>();
+
+    private static ArrayList<Integer> currentVersions = new ArrayList<>();
 
     public static void addEventHandlers(InlineCssTextArea textArea, Tab tab, boolean isColored) {
 
+        currentVersions.add(1);
         textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
             int caretPosition = textArea.getCaretPosition();
@@ -196,14 +202,86 @@ public class EditAreaUtility {
             textArea.setOnKeyTyped(event -> color(textArea));
         }
         textArea.textProperty().addListener((observable, oldValue, newValue) -> {
-            if (!Objects.equals(oldValue, newValue) && saved.get(tabs.indexOf(tab))) {
-                saved.set(tabs.indexOf(tab), false);
-                HBox header = (HBox) tab.getGraphic();
-                header.getChildren().remove(0);
-                header.getChildren().add(0, new Label("* " +
-                        filePaths.get(tabs.indexOf(tab)).toFile().getName() + "     "));
+
+            int tabIndex = tabs.indexOf(tab);
+            if (!Objects.equals(oldValue, newValue)) {
+                currentVersions.set(tabs.indexOf(tab), currentVersions.get(tabIndex) + 1);
+                JLSManager.didChange(filePaths.get(tabs.indexOf(tab)), newValue, currentVersions.get(tabs.indexOf(tab)));
+                int size = mouseEvents.size();
+                for (int i = 0; i < size; i++) {
+                    textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
+                    mouseEvents.remove(0);
+                }
+                color(textArea);
+
+                ArrayList<Character> triggers = new ArrayList<>(List.of('.',',','@','#','*',' '));
+                if (triggers.contains(textArea.getText().charAt(textArea.getCaretPosition() - 1))) {
+                    List<CompletionItem> items = JLSManager.complete(filePaths.get(tabs.indexOf(tab)), getPosition(textArea));
+                    Tooltip complitionTooltip = getCompletionTooltip(items);
+                    if (!complitionTooltip.isShowing()) {
+                        textArea.getCaretBounds().ifPresent(bounds -> {
+                            Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                            complitionTooltip.show(textArea, pos2D.getX(), pos2D.getY());
+                        });
+
+                    }
+
+                }
+
+                if (saved.get(tabIndex)) {
+                    saved.set(tabs.indexOf(tab), false);
+                    HBox header = (HBox) tab.getGraphic();
+                    header.getChildren().remove(0);
+                    header.getChildren().add(0, new Label("* " +
+                            filePaths.get(tabs.indexOf(tab)).toFile().getName() + "     "));
+                }
             }
         });
+
+    }
+
+    private static Position getPosition(InlineCssTextArea textArea) {
+
+        String text = textArea.getText();
+        int lineCount = 0;
+        int charCount = 0;
+        for (int i = 0; i < text.length(); i++) {
+            charCount++;
+            if (text.charAt(i) == '\n') {
+                lineCount++;
+                charCount = 0;
+            }
+            if (i == textArea.getCaretPosition() - 1) {
+                break;
+            }
+        }
+
+        return new Position(lineCount, charCount);
+    }
+
+    private static Tooltip getCompletionTooltip(List<CompletionItem> items) {
+
+        StringBuilder tooltipText = new StringBuilder();
+        for (CompletionItem item : items) {
+            tooltipText.append(item.getLabel()).append("\n\n");
+        }
+
+        ScrollPane scrollPane = new ScrollPane();
+        scrollPane.setMaxWidth(300);
+        scrollPane.setMaxHeight(300);
+        scrollPane.setFitToWidth(true);
+
+        TextArea tooltipContent = new TextArea(tooltipText.toString());
+        tooltipContent.setEditable(false);
+        tooltipContent.setWrapText(true);
+        tooltipContent.setMaxWidth(300);
+
+        scrollPane.setContent(tooltipContent);
+
+        Tooltip tooltip = new Tooltip();
+        tooltip.setGraphic(scrollPane);
+        tooltip.setAutoHide(true);
+        return tooltip;
 
     }
 
@@ -398,6 +476,75 @@ public class EditAreaUtility {
 
         KeyCombination newComb = new KeyCodeCombination(keyCode, modifier);
         menuItem.setAccelerator(newComb);
+
+    }
+
+    public static void processDiagnostic(Diagnostic diagnostic, Path file) {
+
+        int startLine = diagnostic.getRange().getStart().getLine();
+        int endLine = diagnostic.getRange().getEnd().getLine();
+        int startChar = diagnostic.getRange().getStart().getCharacter();
+        int endChar = diagnostic.getRange().getEnd().getCharacter();
+
+        Tab tab;
+        if (filePaths.contains(file)) {
+            tab = tabs.get(filePaths.indexOf(file));
+        } else {
+            return;
+        }
+
+        int start = 0;
+        int end = 0;
+
+        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
+        String text = textArea.getText();
+
+        int currentLine = 0;
+        for (int i = 0; i < text.length(); i++) {
+
+            if (text.charAt(i) == '\n') {
+                currentLine++;
+                if (currentLine == startLine) {
+                    for (int j = i; j < text.length(); j++) {
+                        if (j - i == startChar) {
+                            start = j;
+                            break;
+                        }
+                    }
+                }
+                if (currentLine == endLine) {
+                    for (int j = i; j < text.length(); j++) {
+                        if (j - i == endChar) {
+                            end = j;
+                            break;
+                        }
+                    }
+                }
+            }
+
+        }
+
+        for (int i = start + 1; i <= end; i++) {
+            String currentStyle = textArea.getStyleOfChar(i);
+            textArea.setStyle(i, i + 1, currentStyle + " -fx-fill: red;");
+        }
+
+        Tooltip tooltip = new Tooltip(diagnostic.getMessage());
+
+        // Add event handler for showing the Tooltip
+        int finalStart = start + 1;
+        int finalEnd = end + 1;
+        mouseEvents.add(event -> {
+            int index = textArea.hit(event.getX(), event.getY()).getCharacterIndex().orElse(-1);
+            if (index >= finalStart && index < finalEnd) {
+                if (!tooltip.isShowing()) {
+                    tooltip.show(textArea, event.getScreenX(), event.getScreenY() + 10);
+                }
+            } else {
+                tooltip.hide();
+            }
+        });
+        textArea.addEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(mouseEvents.size() - 1));
 
     }
 

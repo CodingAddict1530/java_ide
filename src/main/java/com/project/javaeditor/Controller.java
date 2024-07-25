@@ -2,6 +2,7 @@ package com.project.javaeditor;
 
 import com.project.custom_classes.RootTreeNode;
 import com.project.custom_classes.SettingsResult;
+import com.project.gradle.GradleWrapper;
 import com.project.java_code_processing.JavaCodeExecutor;
 import com.project.utility.EditAreaUtility;
 import com.project.utility.MainUtility;
@@ -209,7 +210,7 @@ public class Controller implements Initializable {
                 logger.info("No previous content");
                 FileManager.newFile(null, null, true);
             }
-        } catch (IndexOutOfBoundsException e) {
+        } catch (Exception e) {
             logger.error(e);
         }
 
@@ -266,6 +267,10 @@ public class Controller implements Initializable {
         consoleTextArea.unprotectText();
         consoleTextArea.replaceText("");
         consoleTextArea.protectText();
+        GradleWrapper gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile());
+        gradleWrapper.runBuild();
+        gradleWrapper.run();
+        /*
         switch (JavaCodeExecutor.run(file, ProjectManager.getCurrentProject())) {
             case 1:
                 logger.info("Couldn't read {} to execute", file.getPath());
@@ -277,6 +282,8 @@ public class Controller implements Initializable {
                 logger.info("Couldn't delete .class file of {}", file.getPath());
                 break;
         }
+
+         */
 
     }
 
@@ -320,7 +327,7 @@ public class Controller implements Initializable {
 
     public ArrayList<Boolean> getSaved() {
 
-        return this.saved;
+        return saved;
     }
 
 }

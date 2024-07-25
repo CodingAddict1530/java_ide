@@ -44,6 +44,7 @@ public class FileManager {
 
     public static void newFile(String path, String text, boolean isColored) {
 
+        JLSManager.didOpen(Paths.get(path), text);
         Tab newTab = new Tab();
         tabs.add(newTab);
         filePaths.add((path == null) ? null : Paths.get(path));
@@ -169,9 +170,7 @@ public class FileManager {
         String[] splitName;
         if (file != null) {
             splitName = file.getName().split("\\.");
-            if (!file.exists() || !file.isFile() || !file.canRead() ||
-                    !file.canWrite() || (!splitName[splitName.length - 1].equals("java") &&
-                    !splitName[splitName.length - 1].equals("txt"))) {
+            if (!file.exists() || !file.isFile() || !file.canRead() || !file.canWrite()) {
                 return;
             }
         } else {

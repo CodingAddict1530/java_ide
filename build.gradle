@@ -12,22 +12,26 @@ version '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
-}
-
-ext {
-    junitVersion = '5.10.0'
+    flatDir(dirs: 'lib/jdt-language-server-1.37.0-202406271335/plugins')
 }
 
 extraJavaModuleInfo {
     failOnMissingModuleInfo = false
 
-    module('org.eclipse.lsp4j.jsonrpc-0.23.1.jar', 'org.eclipse.lsp4j.jsonrpc') {
+    module('org.eclipse.lsp4j.jsonrpc_0.22.0.v20240213-2011.jar', 'org.eclipse.lsp4j.jsonrpc') {
+        requires('com.google.gson')
+        requires('java.logging')
         exportAllPackages()
     }
-    module('org.eclipse.lsp4j-0.23.1.jar', 'org.eclipse.lsp4j') {
-        requires 'org.eclipse.lsp4j.jsonrpc'
+    module('org.eclipse.lsp4j_0.22.0.v20240213-2011.jar', 'org.eclipse.lsp4j') {
+        requires('org.eclipse.lsp4j.jsonrpc')
+        requires('com.google.gson')
         exportAllPackages()
     }
+}
+
+ext {
+    junitVersion = '5.10.0'
 }
 
 java {
@@ -41,7 +45,7 @@ tasks.withType(JavaCompile).configureEach {
 
 application {
     mainModule = 'com.project.javaeditor'
-    mainClass = 'com.project.javaeditor.HelloApplication'
+    mainClass = 'com.project.javaeditor.Application'
 }
 
 javafx {
@@ -58,8 +62,12 @@ dependencies {
         exclude(group: 'org.openjfx')
     }
 
-    implementation('org.eclipse.jdt:org.eclipse.jdt.core:3.38.0')
-    implementation('org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1')
+    implementation(fileTree(dir: 'lib/jdt-language-server-1.37.0-202406271335/plugins', includes: [
+            'org.eclipse.lsp4j.jsonrpc_0.22.0.v20240213-2011.jar',
+            'org.eclipse.lsp4j_0.22.0.v20240213-2011.jar',
+            'com.google.gson_2.10.1.v20230109-0753.jar'
+
+    ]))
     implementation group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.23.1'
     implementation group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.23.1'
     implementation group: 'org.fxmisc.richtext', name: 'richtextfx', version: '0.11.3'
@@ -72,10 +80,6 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-params:${junitVersion}")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
 
-}
-
-configurations.configureEach {
-    exclude group: 'org.eclipse.jdt', module: 'org.eclipse.jdt.core'
 }
 
 test {
@@ -94,10 +98,3 @@ jlinkZip {
     group = 'distribution'
 }
 
-tasks.register('runJLS', JavaExec) {
-    group = 'Language Server'
-    description = 'Run the JDT Language Server'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = '-jar'
-    args = configurations.runtimeClasspath.find { it.name.contains("org.eclipse.jdt.ls.core") }
-}

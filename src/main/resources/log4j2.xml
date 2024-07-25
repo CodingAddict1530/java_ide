@@ -13,6 +13,10 @@
             <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
         </File>
 
+        <File name="GradleFileLogger" fileName="logs/gradle.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+
         <File name="CustomClassesFileLogger" fileName="logs/custom_classes.log">
             <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
         </File>
@@ -45,19 +49,23 @@
             <AppenderRef ref="JavaEditorFileLogger"/>
         </Logger>
 
-        <Logger name="custom_classes" level="debug" additivity="false">
+        <Logger name="com.project.gradle" level="debug" additivity="false">
+            <AppenderRef ref="GradleFileLogger"/>
+        </Logger>
+
+        <Logger name="com.project.custom_classes" level="debug" additivity="false">
             <AppenderRef ref="CustomClassesFileLogger"/>
         </Logger>
 
-        <Logger name="java_code_processing" level="debug" additivity="false">
+        <Logger name="com.project.java_code_processing" level="debug" additivity="false">
             <AppenderRef ref="JavaCodeProcessingFileLogger"/>
         </Logger>
 
-        <Logger name="managers" level="debug" additivity="false">
+        <Logger name="com.project.managers" level="debug" additivity="false">
             <AppenderRef ref="ManagersFileLogger"/>
         </Logger>
 
-        <Logger name="utility" level="debug" additivity="false">
+        <Logger name="com.project.utility" level="debug" additivity="false">
             <AppenderRef ref="UtilityFileLogger"/>
         </Logger>
     </Loggers>

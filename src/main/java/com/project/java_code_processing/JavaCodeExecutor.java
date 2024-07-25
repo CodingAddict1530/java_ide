@@ -90,7 +90,7 @@ public class JavaCodeExecutor {
         ArrayList<String> fromSrc = new ArrayList<>();
         boolean start = false;
         for (String part : parts2) {
-            if (part.equals("src") || start) {
+            if (part.equals("java") || start) {
                 if (start) {
                     fromSrc.add(part);
                 }
