@@ -1,5 +1,7 @@
 package com.project.javaeditor;
 
+import com.project.custom_classes.OpenFile;
+import com.project.custom_classes.OpenFilesTracker;
 import com.project.managers.FileManager;
 import com.project.utility.MainUtility;
 import javafx.fxml.FXMLLoader;
@@ -44,16 +46,10 @@ public class ApplicationView {
 
     public void checkForUnsavedFiles() {
 
-        Controller controller = fxmlLoader.getController();
-        ArrayList<Integer> unsavedIndexes = new ArrayList<>();
-        for (int i = 0; i < controller.getSaved().size(); i++) {
-            if (!controller.getSaved().get(i)) {
-                unsavedIndexes.add(i);
-            }
-        }
-        if (!unsavedIndexes.isEmpty()) {
+        ArrayList<OpenFile> unsavedFiles = OpenFilesTracker.getAllUnSaved();
+        if (!unsavedFiles.isEmpty()) {
             if (MainUtility.confirm("Unsaved Files", "Application is about to close\nSave unsaved files?")) {
-                FileManager.saveFiles(unsavedIndexes);
+                FileManager.saveFiles(unsavedFiles);
             }
         }
 

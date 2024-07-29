@@ -1,10 +1,14 @@
 package com.project.utility;
 
-import com.project.javaeditor.Application;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.TextInputDialog;
+import com.project.custom_classes.CustomFile;
+import com.project.custom_classes.OpenFile;
+import com.project.custom_classes.OpenFilesTracker;
+import javafx.animation.FadeTransition;
+import javafx.animation.ScaleTransition;
+import javafx.scene.control.*;
 import com.project.managers.FileManager;
+import javafx.stage.Stage;
+import javafx.util.Duration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -19,7 +23,6 @@ public class MainUtility {
     private static final Logger logger = LogManager.getLogger(MainUtility.class);
 
     private static ArrayList<Path> openProjectPath;
-    private static ArrayList<Path> openFilesPaths;
 
     // 1 Failed to write
     // 2 Failed to make readonly
@@ -33,8 +36,8 @@ public class MainUtility {
 
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(openProjectPath.get(0).toString()).append("\n");
-        for (Path filePath : openFilesPaths) {
-            stringBuilder.append(filePath.toString()).append("\n");
+        for (OpenFile o : OpenFilesTracker.getOpenFiles()) {
+            stringBuilder.append(o.getFile().getPath()).append("\n");
         }
         stringBuilder.deleteCharAt(stringBuilder.length() - 1);
         boolean result = FileManager.writeToFile(path, stringBuilder.toString(), true, false);
@@ -117,14 +120,49 @@ public class MainUtility {
 
     }
 
+    public static void fadeStage(Stage stage) {
+
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(1000), stage.getScene().getRoot());
+        fadeOut.setFromValue(stage.getScene().getRoot().getOpacity());
+        fadeOut.setToValue(0.0);
+
+        // Create scale-down transition
+        ScaleTransition scaleDown = new ScaleTransition(Duration.millis(1000), stage.getScene().getRoot());
+        scaleDown.setFromX(1.0);
+        scaleDown.setFromY(1.0);
+        scaleDown.setToX(0.0);
+        scaleDown.setToY(0.0);
+
+        // Play both transitions simultaneously
+        fadeOut.play();
+        scaleDown.play();
+
+        fadeOut.setOnFinished(actionEvent -> fadeInStage(stage));
+
+    }
+
+    public static void fadeInStage(Stage stage) {
+
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(1000), stage.getScene().getRoot());
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+
+        // Create scale-up transition
+        ScaleTransition scaleUp = new ScaleTransition(Duration.millis(1000), stage.getScene().getRoot());
+        scaleUp.setFromX(0.0);
+        scaleUp.setFromY(0.0);
+        scaleUp.setToX(1.0);
+        scaleUp.setToY(1.0);
+
+        // Play both transitions simultaneously
+        fadeIn.play();
+        scaleUp.play();
+
+    }
+
     public static void setOpenProjectPath(ArrayList<Path> openProjectPath) {
 
         MainUtility.openProjectPath = openProjectPath;
-    }
-
-    public static void setOpenFilesPaths(ArrayList<Path> openFilesPaths) {
-
-        MainUtility.openFilesPaths = openFilesPaths;
     }
 
 }

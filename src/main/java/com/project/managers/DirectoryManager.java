@@ -1,7 +1,8 @@
 package com.project.managers;
 
 import com.project.custom_classes.*;
-import com.project.javaeditor.Application;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.input.Clipboard;
@@ -29,6 +30,7 @@ import java.util.Objects;
 public class DirectoryManager {
 
     private static final Logger logger = LogManager.getLogger(DirectoryManager.class);
+    private static final Map<CustomTreeItem<HBox>, Boolean> nodeIsOpen = new HashMap<>();
 
     private static DirectoryChooser directoryChooser;
     private static TabPane tabPane;
@@ -130,7 +132,24 @@ public class DirectoryManager {
         hBox.getChildren().add(new CustomTreeLabel("  " + root.getName(), root.getPath()));
         hBox.setAlignment(Pos.CENTER_LEFT);
         CustomTreeItem<HBox> rootItem = new CustomTreeItem<>(hBox, root.getPath());
-        rootItem.setExpanded(true);
+        if (nodeIsOpen.containsKey(rootItem)) {
+            rootItem.setExpanded(nodeIsOpen.get(rootItem));
+        } else {
+            rootItem.setExpanded(true);
+            nodeIsOpen.put(rootItem, Boolean.TRUE);
+        }
+        rootItem.expandedProperty().addListener(new ChangeListener<Boolean>() {
+
+            @Override
+            public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
+                if (!nodeIsOpen.containsKey(rootItem)) {
+                    logger.error("For some reason, {} is not in nodeIsOpen", rootItem.getPath());
+                } else {
+                    nodeIsOpen.replace(rootItem, newValue);
+                }
+            }
+
+        });
         addChildren(root, rootItem);
         TreeView<HBox> treeView = new TreeView<>(rootItem);
         treeView.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
@@ -224,24 +243,55 @@ public class DirectoryManager {
 
         for (TreeNode childNode : parentNode.getChildren()) {
 
-            HBox hBox = new HBox();
-            String[] parts = childNode.getName().split("\\.");
-            FontIcon icon = new FontIcon((childNode instanceof DirectoryTreeNode) ?
-                    FontAwesomeRegular.FOLDER_OPEN :
-                    (Objects.equals(parts[parts.length - 1], "java")) ? FontAwesomeRegular.FILE_CODE :
-                            FontAwesomeRegular.FILE);
-            icon.setIconColor((childNode instanceof DirectoryTreeNode) ? Color.GREEN :
-                    (Objects.equals(parts[parts.length - 1], "java")) ? Color.PURPLE : Color.GRAY);
-            hBox.getChildren().add(icon);
-            hBox.getChildren().add(new CustomTreeLabel("  " + childNode.getName(), childNode.getPath()));
-            hBox.setAlignment(Pos.CENTER_LEFT);
-            CustomTreeItem<HBox> childItem = new CustomTreeItem<>(hBox, childNode.getPath());
-            childItem.setExpanded(true);
-            parentItem.getChildren().add(childItem);
-            if (childNode instanceof DirectoryTreeNode) {
-                addChildren(childNode, childItem);
+            if (childNode.getPath().toFile().isDirectory()) {
+                add(parentItem, childNode);
             }
 
+        }
+
+        for (TreeNode childNode : parentNode.getChildren()) {
+
+            if (childNode.getPath().toFile().isFile()) {
+                add(parentItem, childNode);
+            }
+
+        }
+    }
+
+    private static void add(CustomTreeItem<HBox> parentItem, TreeNode childNode) {
+        HBox hBox = new HBox();
+        String[] parts = childNode.getName().split("\\.");
+        FontIcon icon = new FontIcon((childNode instanceof DirectoryTreeNode) ?
+                FontAwesomeRegular.FOLDER_OPEN :
+                (Objects.equals(parts[parts.length - 1], "java")) ? FontAwesomeRegular.FILE_CODE :
+                        FontAwesomeRegular.FILE);
+        icon.setIconColor((childNode instanceof DirectoryTreeNode) ? Color.GREEN :
+                (Objects.equals(parts[parts.length - 1], "java")) ? Color.PURPLE : Color.GRAY);
+        hBox.getChildren().add(icon);
+        hBox.getChildren().add(new CustomTreeLabel("  " + childNode.getName(), childNode.getPath()));
+        hBox.setAlignment(Pos.CENTER_LEFT);
+        CustomTreeItem<HBox> childItem = new CustomTreeItem<>(hBox, childNode.getPath());
+        if (nodeIsOpen.containsKey(childItem)) {
+            childItem.setExpanded(nodeIsOpen.get(childItem));
+        } else {
+            childItem.setExpanded(false);
+            nodeIsOpen.put(childItem, Boolean.FALSE);
+        }
+        childItem.expandedProperty().addListener(new ChangeListener<Boolean>() {
+
+            @Override
+            public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
+                if (!nodeIsOpen.containsKey(childItem)) {
+                    logger.error("For some reason, {} is not in nodeIsOpen", childItem.getPath());
+                } else {
+                    nodeIsOpen.replace(childItem, newValue);
+                }
+            }
+
+        });
+        parentItem.getChildren().add(childItem);
+        if (childNode instanceof DirectoryTreeNode) {
+            addChildren(childNode, childItem);
         }
     }
 

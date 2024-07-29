@@ -13,6 +13,10 @@
             <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
         </File>
 
+        <File name="ProjectWatcherFileLogger" fileName="logs/projectWatcher.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
+        </File>
+
         <File name="GradleFileLogger" fileName="logs/gradle.log">
             <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"/>
         </File>
@@ -47,6 +51,10 @@
         <Logger name="com.project.javaeditor" level="debug" additivity="false">
             <AppenderRef ref="ConsoleLogger"/>
             <AppenderRef ref="JavaEditorFileLogger"/>
+        </Logger>
+
+        <Logger name="com.project.utility.ProjectWatcher" level="debug" additivity="false">
+            <AppenderRef ref="ProjectWatcherFileLogger"/>
         </Logger>
 
         <Logger name="com.project.gradle" level="debug" additivity="false">

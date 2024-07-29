@@ -1,6 +1,6 @@
 package com.project.managers;
 
-import com.project.custom_classes.ConsoleTextArea;
+import com.project.custom_classes.*;
 import com.project.java_code_processing.JavaCodeExecutor;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -14,7 +14,6 @@ import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.fxmisc.richtext.InlineCssTextArea;
 import org.fxmisc.richtext.LineNumberFactory;
 import com.project.utility.EditAreaUtility;
 import com.project.utility.MainUtility;
@@ -31,10 +30,6 @@ public class FileManager {
     private static final Logger logger = LogManager.getLogger(FileManager.class);
 
     private static TabPane tabPane;
-    private static ArrayList<Path> openFilesPaths;
-    private static ArrayList<Tab> tabs;
-    private static ArrayList<Path> filePaths;
-    private static ArrayList<Boolean> saved;
     private static ArrayList<Path> openProjectPath;
     private static FileChooser fileChooser;
     private static HBox console;
@@ -46,21 +41,35 @@ public class FileManager {
 
         JLSManager.didOpen(Paths.get(path), text);
         Tab newTab = new Tab();
-        tabs.add(newTab);
-        filePaths.add((path == null) ? null : Paths.get(path));
-        saved.add(path != null);
+        String[] parts = path.split("\\\\");
+        StringBuilder packageName = new StringBuilder();
+        boolean start = false;
+        for (String part : parts) {
+            if (part.equals("java") || start) {
+                if (start) {
+                    packageName.append(part).append(".");
+                }
+                start = true;
+            }
+        }
+        if(!packageName.isEmpty()) {
+            for (int i = 0; i < 6; i++) {
+                packageName.deleteCharAt(packageName.length() - 1);
+            }
+        }
+        OpenFilesTracker.addOpenFile(new OpenFile(new CustomFile(path, packageName.toString()),
+                newTab, true));
         HBox header = new HBox();
         header.setAlignment(javafx.geometry.Pos.CENTER);
-        Label headerLabel = new Label((path == null) ? "* Untitled.java     " :
-                new File(path).getName() + "     ");
+        Label headerLabel = new Label(new File(path).getName() + "     ");
         Button closeBtn = new Button("x");
         closeBtn.getStyleClass().add("close-button");
         closeBtn.setOnAction(event -> closeFile(newTab));
         header.getChildren().addAll(headerLabel, closeBtn);
         newTab.setGraphic(header);
 
-        InlineCssTextArea textArea = new InlineCssTextArea();
-        textArea.getStyleClass().add("inline-css-text-area");
+        CustomTextArea textArea = new CustomTextArea(isColored);
+        textArea.getStyleClass().add("custom-text-area");
 
         IntFunction<Node> lineNumberFactory = LineNumberFactory.get(textArea);
         IntFunction<Node> customLineNumberFactory = line -> {
@@ -75,7 +84,7 @@ public class FileManager {
 
         textArea.setParagraphGraphicFactory(customLineNumberFactory);
         textArea.replaceText((text == null) ? "" : text);
-        EditAreaUtility.addEventHandlers(textArea, newTab, isColored);
+        EditAreaUtility.addEventHandler(textArea, newTab);
         ContextMenu contextMenu = EditAreaUtility.getContextMenu(
                 new Object[]{"Cut", KeyCode.X, 1},
                 new Object[]{"Copy", KeyCode.C, 2},
@@ -97,10 +106,9 @@ public class FileManager {
             tab = tabPane.getSelectionModel().getSelectedItem();
         }
         if (tab != null) {
-            saved.remove(tabs.indexOf(tab));
-            openFilesPaths.remove(filePaths.get(tabs.indexOf(tab)));
-            filePaths.remove(tabs.indexOf(tab));
-            tabs.remove(tab);
+            OpenFile file = OpenFilesTracker.getOpenFile(tab);
+            JLSManager.didClose(file.getFile().toPath());
+            OpenFilesTracker.removeOpenFile(file);
             tabPane.getTabs().remove(tab);
         }
     }
@@ -114,37 +122,25 @@ public class FileManager {
             }
         }
 
-        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
-        File file;
-        if (tabs.contains(tab) && filePaths.get(tabs.indexOf(tab)) != null) {
-            file = filePaths.get(tabs.indexOf(tab)).toFile();
-            saved.set(tabs.indexOf(tab), true);
+        CustomTextArea textArea = (CustomTextArea) tab.getContent();
+        File file = OpenFilesTracker.getOpenFile(tab).getFile();
+        if (file != null) {
+            JLSManager.sendWillSave(file.toURI().toString());
+            writeToFile(file.toPath(), textArea.getInnerTextArea().getText(), true, false);
+            JLSManager.sendDidSave(file.toURI().toString(), textArea.getInnerTextArea().getText());
+            OpenFilesTracker.getOpenFile(tab).setIsSaved(true);
             HBox header = (HBox) tab.getGraphic();
             header.getChildren().remove(0);
-            header.getChildren().add(0, new Label(filePaths.get(tabs.indexOf(tab)).toFile().getName() + "     "));
-        } else {
-            fileChooser.setTitle("Save File");
-            fileChooser.getExtensionFilters().removeAll();
-            fileChooser.getExtensionFilters().addAll(
-                    new FileChooser.ExtensionFilter("Java files", "*.java")
-            );
-            file = fileChooser.showSaveDialog(tabPane.getScene().getWindow());
-            if (file != null) {
-                openFilesPaths.add(file.toPath());
-            }
-        }
-        if (file != null) {
-            writeToFile(file.toPath(), textArea.getText(), true, false);
+            header.getChildren().add(0, new Label(OpenFilesTracker.getOpenFile(tab).getFile().getName() + "     "));
         } else {
             System.out.println("No File Selected");
         }
     }
 
-    public static void saveFiles(ArrayList<Integer> indexes) {
-        if (indexes != null) {
-            for (Integer i : indexes) {
-                saveFile(tabPane.getTabs().get(i));
-            }
+    public static void saveFiles(ArrayList<OpenFile> openFiles) {
+
+        for (OpenFile o : openFiles) {
+            saveFile(o.getTab());
         }
     }
 
@@ -158,12 +154,13 @@ public class FileManager {
                     new FileChooser.ExtensionFilter("Java files", "*.java")
             );
             file = fileChooser.showOpenDialog(tabPane.getScene().getWindow());
+            path = file.toPath();
         } else {
             file = path.toFile();
         }
 
-        if (filePaths.contains(file.toPath())) {
-            tabPane.getSelectionModel().select(tabs.get(filePaths.indexOf(file.toPath())));
+        if (OpenFilesTracker.getOpenFile(path) != null) {
+            tabPane.getSelectionModel().select(OpenFilesTracker.getOpenFile(path).getTab());
             return;
         }
 
@@ -185,7 +182,6 @@ public class FileManager {
             }
         }
 
-        openFilesPaths.add(file.toPath());
         newFile(file.getPath(), text.toString(), splitName[splitName.length - 1].equals("java"));
 
     }
@@ -204,7 +200,7 @@ public class FileManager {
         String[] splitName = path.toString().split("\\\\");
         boolean found = false;
         for (String s : splitName) {
-            if (s.equals("src")) {
+            if (s.equals("java")) {
                 found = true;
                 break;
             }
@@ -219,16 +215,30 @@ public class FileManager {
         }
         File file = new File(path.toString(), name + ".java");
         String parentName = path.toFile().getName();
+        String[] parentNameParts = parentName.split("\\\\");
+        boolean packageStart = false;
+        StringBuilder packageName = new StringBuilder();
+        for (String s : parentNameParts) {
+            if (packageStart) {
+                packageName.append("s").append(".");
+            }
+            if (s.equals("java")) {
+                packageStart = true;
+            }
+        }
+        if (!packageName.isEmpty()) {
+            packageName.deleteCharAt(packageName.length() - 1);
+        }
         String[] fileNameParts = file.getName().split("\\.");
         List<String> content;
-        if (parentName.equals("src")) {
+        if (parentName.equals("java")) {
             content = List.of(
-                    "public " + extraKeyWord + fileNameParts[0] + " {\n\t\n}"
+                    "public " + extraKeyWord + fileNameParts[0] + " {\n    \n}"
             );
         } else {
             content = List.of(
                     "package " + parentName + ";\n\n",
-                    "public " + extraKeyWord + fileNameParts[0] + " {\n\t\n}"
+                    "public " + extraKeyWord + fileNameParts[0] + " {\n    \n}"
             );
         }
         try {
@@ -242,8 +252,15 @@ public class FileManager {
             System.out.println(e.getMessage());
         }
 
+        StringBuilder sb = new StringBuilder();
+        for (String s : content) {
+            sb.append(s).append("\n");
+        }
+        if (!sb.isEmpty()) {
+            sb.deleteCharAt(sb.length() - 1);
+        }
+        JLSManager.sendDidSave(file.toURI().toString(), sb.toString());
         openFile(file.toPath());
-        ProjectManager.openProject(openProjectPath.get(0));
 
     }
 
@@ -312,18 +329,17 @@ public class FileManager {
         }
         if (confirm) {
             File file = new File(path.toString());
-            Tab tab = tabs.get(filePaths.indexOf(file.toPath()));
-            if (tab != null) {
-                closeFile(tab);
+            if (OpenFilesTracker.getOpenFile(path) != null) {
+                closeFile(OpenFilesTracker.getOpenFile(path).getTab());
             }
             if (file.exists()) {
                 if (file.delete()) {
+                    JLSManager.sendDeletedFile(file.toURI().toString());
                     logger.info("Deleted {}", file.getPath());
                 }
             } else {
                 System.out.println("File Not Found");
             }
-            ProjectManager.openProject(openProjectPath.get(0));
         }
 
     }
@@ -399,13 +415,10 @@ public class FileManager {
             } catch (IOException e) {
                 System.out.println(e.getMessage());
             }
-            ProjectManager.openProject(openProjectPath.get(0));
-            if (filePaths.contains(path)) {
-                Tab tab = tabs.get(filePaths.indexOf(path));
-                if (tab != null) {
-                    closeFile(tab);
-                    openFile(newPath);
-                }
+            //ProjectManager.openProject(openProjectPath.get(0));
+            if (OpenFilesTracker.getOpenFile(path) != null) {
+                closeFile(OpenFilesTracker.getOpenFile(path).getTab());
+                openFile(newPath);
             }
         }
 
@@ -451,26 +464,6 @@ public class FileManager {
     public static void setTabPane(TabPane tabPane) {
 
         FileManager.tabPane = tabPane;
-    }
-
-    public static void setOpenFilesPaths(ArrayList<Path> openFilesPaths) {
-
-        FileManager.openFilesPaths = openFilesPaths;
-    }
-
-    public static void setTabs(ArrayList<Tab> tabs) {
-
-        FileManager.tabs = tabs;
-    }
-
-    public static void setFilePaths(ArrayList<Path> filePaths) {
-
-        FileManager.filePaths = filePaths;
-    }
-
-    public static void setSaved(ArrayList<Boolean> saved) {
-
-        FileManager.saved = saved;
     }
 
     public static void setFileChooser(FileChooser fileChooser) {

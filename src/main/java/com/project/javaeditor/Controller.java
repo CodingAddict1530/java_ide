@@ -1,9 +1,11 @@
 package com.project.javaeditor;
 
-import com.project.custom_classes.RootTreeNode;
+import com.project.custom_classes.CustomFile;
+import com.project.custom_classes.OpenFilesTracker;
 import com.project.custom_classes.SettingsResult;
 import com.project.gradle.GradleWrapper;
 import com.project.java_code_processing.JavaCodeExecutor;
+import com.project.managers.*;
 import com.project.utility.EditAreaUtility;
 import com.project.utility.MainUtility;
 import com.project.utility.SettingsUtility;
@@ -20,10 +22,6 @@ import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import com.project.custom_classes.ConsoleTextArea;
-import com.project.managers.DirectoryManager;
-import com.project.managers.FileManager;
-import com.project.managers.ProjectManager;
-import com.project.managers.TextManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
@@ -73,13 +71,9 @@ public class Controller implements Initializable {
 
     private static final Logger logger = LogManager.getLogger(Controller.class);
 
-    private static final ArrayList<Tab> tabs = new ArrayList<>();
-    private static final ArrayList<Path> filePaths = new ArrayList<>();
-    private static final ArrayList<Boolean> saved = new ArrayList<>();
     private static final FileChooser fileChooser = new FileChooser();
     private static final DirectoryChooser directoryChooser = new DirectoryChooser();
     private static final ArrayList<Path> openProjectPath = new ArrayList<>();
-    private static final ArrayList<Path> openFilesPaths = new ArrayList<>();
     private static final Clipboard clipboard = Clipboard.getSystemClipboard();
     private static final ArrayList<Boolean> shouldCut = new ArrayList<>();
     private static SettingsResult settingsResult;
@@ -128,7 +122,8 @@ public class Controller implements Initializable {
     @FXML
     public void newFile() {
 
-        FileManager.newFile(null, null, true);
+        Application.fadeStage();
+        //FileManager.newFile(null, null, true);
     }
 
     @FXML
@@ -157,9 +152,8 @@ public class Controller implements Initializable {
             return;
         }
 
-        RootTreeNode project = ProjectManager.createProject(output);
         FileManager.closeAll();
-        ProjectManager.openProject(project.getPath());
+        ProjectManager.createProject(output);
 
     }
 
@@ -258,18 +252,21 @@ public class Controller implements Initializable {
 
         verticalSplitPane.setDividerPositions(0.7);
         Tab tab = tabPane.getSelectionModel().getSelectedItem();
-        File file;
-        if (filePaths.get(tabs.indexOf(tab)) == null) {
+        if (tab == null) {
+            return;
+        }
+        if (Boolean.FALSE.equals(OpenFilesTracker.isSaved(tab))) {
             saveFile();
         }
-        file = filePaths.get(tabs.indexOf(tab)).toFile();
+        CustomFile file = OpenFilesTracker.getOpenFile(tab).getFile();
         ConsoleTextArea consoleTextArea = (ConsoleTextArea) console.getChildren().get(0);
         consoleTextArea.unprotectText();
         consoleTextArea.replaceText("");
         consoleTextArea.protectText();
-        GradleWrapper gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile());
+        GradleWrapper gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile()
+            , consoleTextArea);
         gradleWrapper.runBuild();
-        gradleWrapper.run();
+        gradleWrapper.run(file.getPackageName());
         /*
         switch (JavaCodeExecutor.run(file, ProjectManager.getCurrentProject())) {
             case 1:
@@ -290,10 +287,6 @@ public class Controller implements Initializable {
     public void initializeManagers() {
 
         FileManager.setFileChooser(fileChooser);
-        FileManager.setTabs(tabs);
-        FileManager.setFilePaths(filePaths);
-        FileManager.setSaved(saved);
-        FileManager.setOpenFilesPaths(openFilesPaths);
         FileManager.setTabPane(tabPane);
         FileManager.setConsole(console);
         FileManager.setVerticalSplitPane(verticalSplitPane);
@@ -311,23 +304,15 @@ public class Controller implements Initializable {
         TextManager.setTabPane(tabPane);
         TextManager.setClipboard(clipboard);
 
+        ProjectManager.setTextArea((ConsoleTextArea) console.getChildren().get(0));
+
         SettingsUtility.setDirectoryChooser(directoryChooser);
         SettingsUtility.setTabPane(tabPane);
 
-        EditAreaUtility.setTabs(tabs);
-        EditAreaUtility.setFilePaths(filePaths);
-        EditAreaUtility.setSaved(saved);
-
-        MainUtility.setOpenFilesPaths(openFilesPaths);
         MainUtility.setOpenProjectPath(openProjectPath);
 
         JavaCodeExecutor.setConsoleTextArea((ConsoleTextArea) console.getChildren().get(0));
 
-    }
-
-    public ArrayList<Boolean> getSaved() {
-
-        return saved;
     }
 
 }

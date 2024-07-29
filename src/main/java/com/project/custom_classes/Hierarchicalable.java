@@ -4,8 +4,8 @@ import java.util.ArrayList;
 
 public interface Hierarchicalable {
 
-    public TreeNode getParent();
+    TreeNode getParent();
 
-    public ArrayList<TreeNode> getChildren();
+    ArrayList<TreeNode> getChildren();
 
 }

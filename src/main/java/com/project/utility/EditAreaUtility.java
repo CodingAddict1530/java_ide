@@ -1,5 +1,7 @@
 package com.project.utility;
 
+import com.project.custom_classes.CustomTextArea;
+import com.project.custom_classes.OpenFilesTracker;
 import com.project.managers.JLSManager;
 import javafx.event.EventHandler;
 import javafx.geometry.Point2D;
@@ -9,15 +11,10 @@ import javafx.scene.layout.HBox;
 import com.project.managers.TextManager;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.Position;
-import org.fxmisc.richtext.InlineCssTextArea;
-import org.fxmisc.richtext.model.TwoDimensional;
+import org.eclipse.lsp4j.SignatureHelp;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -78,171 +75,58 @@ public class EditAreaUtility {
             "@interface"
     ));
 
-    private static Integer moveCaret = 0;
-    private static ArrayList<Tab> tabs;
-    private static ArrayList<Path> filePaths;
-    private static ArrayList<Boolean> saved;
-    private static ArrayList<EventHandler<MouseEvent>> mouseEvents = new ArrayList<>();
+    private static final ArrayList<Character> completionTriggers = new ArrayList<>(List.of('.', '(', '"', '\'', ':', '@', '[', '{', ' '));
 
-    private static ArrayList<Integer> currentVersions = new ArrayList<>();
+    private static final ArrayList<Character> sHelpTriggers = new ArrayList<>(List.of('(', ','));
 
-    public static void addEventHandlers(InlineCssTextArea textArea, Tab tab, boolean isColored) {
+    private static final ArrayList<EventHandler<MouseEvent>> mouseEvents = new ArrayList<>();
 
-        currentVersions.add(1);
-        textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+    private static final Map<Tab, Integer> currentVersions = new HashMap<>();
 
-            int caretPosition = textArea.getCaretPosition();
-            switch (event.getCharacter()) {
-                case "(":
-                    event.consume();
-                    if (textArea.getSelectedText().isEmpty()) {
-                        textArea.replaceText(caretPosition, caretPosition, "()");
-                        textArea.moveTo(caretPosition + 1);
-                    } else {
-                        System.out.println("LOL");
-                        textArea.replaceSelection(String.format("(%s)", textArea.getSelectedText()));
-                    }
-                    color(textArea);
-                    break;
-                case "{":
-                    event.consume();
-                    if (textArea.getSelectedText().isEmpty()) {
-                        textArea.replaceText(caretPosition, caretPosition, "{}");
-                        textArea.moveTo(caretPosition + 1);
-                    } else {
-                        textArea.replaceSelection(String.format("{%s}", textArea.getSelectedText()));
-                    }
-                    color(textArea);
-                    break;
-                case "[":
-                    event.consume();
-                    if (textArea.getSelectedText().isEmpty()) {
-                        textArea.replaceText(caretPosition, caretPosition, "[]");
-                        textArea.moveTo(caretPosition + 1);
-                    } else {
-                        textArea.replaceSelection(String.format("[%s]", textArea.getSelectedText()));
-                    }
-                    color(textArea);
-                    break;
-                case "\"":
-                    event.consume();
-                    if (textArea.getSelectedText().isEmpty()) {
-                        textArea.replaceText(caretPosition, caretPosition, "\"\"");
-                        textArea.moveTo(caretPosition + 1);
-                    } else {
-                        textArea.replaceSelection(String.format("\"%s\"", textArea.getSelectedText()));
-                    }
-                    color(textArea);
-                    break;
-                case "'":
-                    event.consume();
-                    if (textArea.getSelectedText().isEmpty()) {
-                        textArea.replaceText(caretPosition, caretPosition, "''");
-                        textArea.moveTo(caretPosition + 1);
-                    } else {
-                        textArea.replaceSelection(String.format("'%s'", textArea.getSelectedText()));
-                    }
-                    color(textArea);
-                    break;
-                case "*":
-                    event.consume();
-                    if (!textArea.getText().isEmpty() &&
-                            textArea.getText().charAt(textArea.getCaretPosition() - 1) == '/') {
-                        textArea.replaceText(caretPosition, caretPosition, "**/");
-                        textArea.moveTo(caretPosition + 1);
-                    } else {
-                        textArea.replaceText(caretPosition, caretPosition, "*");
-                    }
-                    color(textArea);
-                    break;
-            }
+    public static void addEventHandler(CustomTextArea textArea, Tab tab) {
 
-        });
-        textArea.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+        currentVersions.put(tab, 1);
+        textArea.getInnerTextArea().textProperty().addListener((observable, oldValue, newValue) -> {
 
-            int caretPosition = textArea.getCaretPosition();
-            switch (event.getCode()) {
-                case TAB:
-                    textArea.replaceText(caretPosition, caretPosition, "\t");
-                    textArea.moveTo(caretPosition + 1);
-                    break;
-                case BACK_SPACE:
-                    String text = textArea.getText();
-                    char caretLeft = caretPosition > 0 ? text.charAt(caretPosition - 1) : '\u0000';
-                    char caretRight = caretPosition < text.length() ? text.charAt(caretPosition) : '\u0000';
-                    if ((caretLeft == '(' && caretRight == ')') || (caretLeft == '{' && caretRight == '}') ||
-                            (caretLeft == '[' && caretRight == ']') || (caretLeft == '\"' && caretRight == '\"') ||
-                            (caretLeft == '\'' && caretRight == '\'')) {
-                        textArea.replaceText(caretPosition, caretPosition + 1, "");
-                    }
-                    break;
-
-            }
-        });
-        textArea.setOnKeyPressed(event -> {
-
-            int caretPosition = textArea.getCaretPosition();
-            if (Objects.requireNonNull(event.getCode()) == KeyCode.ENTER) {
-                textArea.insertText(caretPosition, textHandler(textArea));
-                if (moveCaret != 0) {
-                    textArea.moveTo(textArea.getCaretPosition() - moveCaret);
-                    moveCaret = 0;
-                }
-                if (textArea.getCaretPosition() >= 2 && textArea.getText().length() > 2 &&
-                        textArea.getText().charAt(textArea.getCaretPosition() - 2) == '*' &&
-                        textArea.getText().charAt(textArea.getCaretPosition()) == '*') {
-                    textArea.replaceText(textArea.getCaretPosition(), textArea.getCaretPosition(), "\n ");
-                    textArea.moveTo(textArea.getCaretPosition() - 2);
-                    textArea.replaceText(textArea.getCaretPosition(), textArea.getCaretPosition(), " * ");
-                }
-            }
-
-        });
-        if (isColored) {
-            textArea.setOnKeyTyped(event -> color(textArea));
-        }
-        textArea.textProperty().addListener((observable, oldValue, newValue) -> {
-
-            int tabIndex = tabs.indexOf(tab);
             if (!Objects.equals(oldValue, newValue)) {
-                currentVersions.set(tabs.indexOf(tab), currentVersions.get(tabIndex) + 1);
-                JLSManager.didChange(filePaths.get(tabs.indexOf(tab)), newValue, currentVersions.get(tabs.indexOf(tab)));
-                int size = mouseEvents.size();
-                for (int i = 0; i < size; i++) {
-                    textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
-                    mouseEvents.remove(0);
-                }
-                color(textArea);
+                currentVersions.replace(tab, currentVersions.get(tab) + 1);
+                JLSManager.didChange(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), newValue, currentVersions.get(tab));
+                if (textArea.getCaretPosition() > 0) {
+                    List<CompletionItem> items = null;
+                    if (sHelpTriggers.contains(textArea.getInnerTextArea().getText().charAt(textArea.getCaretPosition() - 1))) {
+                        SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea));
+                        System.out.println(s);
+                    } else if (completionTriggers.contains(textArea.getInnerTextArea().getText().charAt(textArea.getCaretPosition() - 1))) {
+                        items = JLSManager.complete(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea));
+                    }
+                    if (items != null) {
+                        Tooltip complitionTooltip = getCompletionTooltip(items);
+                        if (!complitionTooltip.isShowing()) {
+                            textArea.getCaretBounds().ifPresent(bounds -> {
+                                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                                complitionTooltip.show(textArea, pos2D.getX(), pos2D.getY());
+                            });
 
-                ArrayList<Character> triggers = new ArrayList<>(List.of('.',',','@','#','*',' '));
-                if (triggers.contains(textArea.getText().charAt(textArea.getCaretPosition() - 1))) {
-                    List<CompletionItem> items = JLSManager.complete(filePaths.get(tabs.indexOf(tab)), getPosition(textArea));
-                    Tooltip complitionTooltip = getCompletionTooltip(items);
-                    if (!complitionTooltip.isShowing()) {
-                        textArea.getCaretBounds().ifPresent(bounds -> {
-                            Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
-                            complitionTooltip.show(textArea, pos2D.getX(), pos2D.getY());
-                        });
-
+                        }
                     }
 
                 }
 
-                if (saved.get(tabIndex)) {
-                    saved.set(tabs.indexOf(tab), false);
+                if (Boolean.TRUE.equals(OpenFilesTracker.isSaved(tab))) {
+                    OpenFilesTracker.getOpenFile(tab).setIsSaved(false);
                     HBox header = (HBox) tab.getGraphic();
                     header.getChildren().remove(0);
                     header.getChildren().add(0, new Label("* " +
-                            filePaths.get(tabs.indexOf(tab)).toFile().getName() + "     "));
+                            OpenFilesTracker.getOpenFile(tab).getFile().getName() + "     "));
                 }
             }
         });
 
     }
 
-    private static Position getPosition(InlineCssTextArea textArea) {
+    private static org.eclipse.lsp4j.Position getPosition(CustomTextArea textArea) {
 
-        String text = textArea.getText();
+        String text = textArea.getInnerTextArea().getText();
         int lineCount = 0;
         int charCount = 0;
         for (int i = 0; i < text.length(); i++) {
@@ -256,7 +140,7 @@ public class EditAreaUtility {
             }
         }
 
-        return new Position(lineCount, charCount);
+        return new org.eclipse.lsp4j.Position(lineCount, charCount - 1);
     }
 
     private static Tooltip getCompletionTooltip(List<CompletionItem> items) {
@@ -285,82 +169,8 @@ public class EditAreaUtility {
 
     }
 
-    public static String textHandler(InlineCssTextArea textArea) {
-
-        String line = getLine(textArea);
-        int caretPosition = textArea.getCaretPosition();
-        String text = textArea.getText();
-        char caretLeft = caretPosition > 1 ? text.charAt(caretPosition - 2) : '\u0000';
-        char caretRight = caretPosition < text.length() ? text.charAt(caretPosition) : '\u0000';
-        return applyIndent(line, caretLeft, caretRight);
-
-    }
-
-    public static String getLine(InlineCssTextArea textArea) {
-
-        int caretPosition = textArea.getCaretPosition();
-        int start = (caretPosition == 0) ? 0 : caretPosition - 1;
-        while (start > 0 && textArea.getText().charAt(start - 1) != '\n') {
-            start--;
-        }
-        return textArea.getText(start, caretPosition);
-
-    }
-
-    public static String applyIndent(String line, char caretLeft, char caretRight) {
-
-        StringBuilder indent = new StringBuilder();
-        int openBracketCount = 0;
-        int openSquareBracketCount = 0;
-        int openCurlyBracketCount = 0;
-        int closedBracketCount = 0;
-        int closedSquareBracketCount = 0;
-        int closedCurlyBracketCount = 0;
-        int count = 0;
-
-        for (char c : line.toCharArray()) {
-            if (c != '\t') {
-                break;
-            } else {
-                indent.append(c);
-                count++;
-            }
-        }
-
-        for (char c : line.toCharArray()) {
-            if (c == '(') {
-                openBracketCount++;
-            } else if (c == '[') {
-                openSquareBracketCount++;
-            } else if (c == '{') {
-                openCurlyBracketCount++;
-            } else if (c == ')') {
-                closedBracketCount++;
-            } else if (c == ']') {
-                closedSquareBracketCount++;
-            } else if (c == '}') {
-                closedCurlyBracketCount++;
-            }
-        }
-
-        if (openBracketCount > closedBracketCount ||
-                openSquareBracketCount > closedSquareBracketCount ||
-                openCurlyBracketCount > closedCurlyBracketCount) {
-            indent.append('\t');
-        }
-
-        if ((caretLeft == '(' && caretRight == ')') || (caretLeft == '{' && caretRight == '}')
-                || (caretLeft == '[' && caretRight == ']')) {
-            indent.append('\n');
-            indent.append("\t".repeat(Math.max(0, count)));
-            moveCaret = count + 1;
-        }
-
-        return indent.toString();
-    }
-
-    public static void color(InlineCssTextArea textArea) {
-        String line = textArea.getText();
+    public static void color(CustomTextArea textArea) {
+        String line = textArea.getInnerTextArea().getText();
 
         line = matchAndColor(line, textArea, "/\\*.*?\\*/",
                 "green", true, true);
@@ -405,7 +215,7 @@ public class EditAreaUtility {
 
     }
 
-    private static String matchAndColor(String line, InlineCssTextArea textArea, String regex,
+    private static String matchAndColor(String line, CustomTextArea textArea, String regex,
                                 String color, boolean dotAll, boolean boundaries) {
         Pattern pattern;
         if (dotAll) {
@@ -436,7 +246,7 @@ public class EditAreaUtility {
         return modifiedLine.toString();
     }
 
-    private static void colorThis(InlineCssTextArea textArea, String color, int[] word) {
+    private static void colorThis(CustomTextArea textArea, String color, int[] word) {
 
         textArea.setStyle(word[0], word[1], "-fx-fill: " + color + ";");
 
@@ -486,45 +296,58 @@ public class EditAreaUtility {
         int startChar = diagnostic.getRange().getStart().getCharacter();
         int endChar = diagnostic.getRange().getEnd().getCharacter();
 
-        Tab tab;
-        if (filePaths.contains(file)) {
-            tab = tabs.get(filePaths.indexOf(file));
-        } else {
+        Tab tab = null;
+        try {
+            tab = OpenFilesTracker.getOpenFile(file).getTab();
+        } catch (NullPointerException ignored) {}
+
+        if (tab == null) {
             return;
         }
+
+        int size = mouseEvents.size();
+        CustomTextArea textArea = (CustomTextArea) tab.getContent();
+        for (int i = 0; i < size; i++) {
+            textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
+            mouseEvents.remove(0);
+        }
+        color(textArea);
 
         int start = 0;
         int end = 0;
 
-        InlineCssTextArea textArea = (InlineCssTextArea) tab.getContent();
-        String text = textArea.getText();
+        String text = textArea.getInnerTextArea().getText();
 
         int currentLine = 0;
         for (int i = 0; i < text.length(); i++) {
 
             if (text.charAt(i) == '\n') {
                 currentLine++;
-                if (currentLine == startLine) {
-                    for (int j = i; j < text.length(); j++) {
-                        if (j - i == startChar) {
-                            start = j;
-                            break;
-                        }
+
+            }
+            if (currentLine == startLine) {
+                for (int j = i; j < text.length(); j++) {
+                    if (j - i == startChar) {
+                        start = j;
+                        break;
                     }
                 }
-                if (currentLine == endLine) {
-                    for (int j = i; j < text.length(); j++) {
-                        if (j - i == endChar) {
-                            end = j;
-                            break;
-                        }
+            }
+            if (currentLine == endLine) {
+                for (int j = i; j < text.length(); j++) {
+                    if (j - i == endChar) {
+                        end = j;
+                        break;
                     }
                 }
+            }
+            if (start != 0 || end != 0) {
+                break;
             }
 
         }
 
-        for (int i = start + 1; i <= end; i++) {
+        for (int i = start; i < end; i++) {
             String currentStyle = textArea.getStyleOfChar(i);
             textArea.setStyle(i, i + 1, currentStyle + " -fx-fill: red;");
         }
@@ -548,18 +371,4 @@ public class EditAreaUtility {
 
     }
 
-    public static void setTabs(ArrayList<Tab> tabs) {
-
-        EditAreaUtility.tabs = tabs;
-    }
-
-    public static void setFilePaths(ArrayList<Path> filePaths) {
-
-        EditAreaUtility.filePaths = filePaths;
-    }
-
-    public static void setSaved(ArrayList<Boolean> saved) {
-
-        EditAreaUtility.saved = saved;
-    }
 }

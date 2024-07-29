@@ -1,11 +1,12 @@
 package com.project.gradle;
 
+import com.project.custom_classes.ConsoleTextArea;
+import javafx.application.Platform;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.InputStreamReader;
+import java.io.*;
+import java.util.concurrent.CountDownLatch;
 
 public class GradleWrapper {
 
@@ -13,14 +14,36 @@ public class GradleWrapper {
 
     private final File gradleHome;
     private final File projectHome;
+    private final ConsoleTextArea textArea;
 
-    public GradleWrapper(File gradleHome, File projectHome) {
+    public GradleWrapper(File gradleHome, File projectHome, ConsoleTextArea textArea) {
 
         this.gradleHome = gradleHome;
         this.projectHome = projectHome;
+        this.textArea = textArea;
     }
 
-    public void run() {
+    private void setUp(BufferedWriter bufferedWriter) {
+
+        textArea.setOnKeyPressed(event -> {
+
+            if (event.getCode().toString().equals("ENTER")) {
+                String input = getUserInput(textArea);
+                try {
+                    bufferedWriter.write(input + System.lineSeparator());
+                    bufferedWriter.flush();
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                }
+                textArea.setStyle(textArea.getCaretPosition(), textArea.getCaretPosition(),
+                        "-fx-fill: black;");
+            };
+
+        });
+
+    }
+
+    public void run(String packageName) {
 
         // Determine the correct wrapper script based on OS
         String wrapperScript = System.getProperty("os.name").toLowerCase().contains("windows")
@@ -28,22 +51,19 @@ public class GradleWrapper {
 
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.directory(projectHome);
-        processBuilder.command(wrapperScript, "run");
+        if (packageName != null) {
+            processBuilder.command(wrapperScript, "run", "-PmainClass=" + packageName);
+        } else {
+            processBuilder.command(wrapperScript, "run");
+        }
         processBuilder.redirectErrorStream(true);
         try {
             Process process = processBuilder.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                logger.info("Gradle process failed with exit code {}", exitCode);
-            }
+            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            setUp(bufferedWriter);
+            writeToConsole(process, null);
         } catch (Exception e) {
-            logger.error("Error running Gradle command init", e);
+            logger.error("Error running Gradle command run", e);
         }
 
     }
@@ -60,23 +80,16 @@ public class GradleWrapper {
         processBuilder.redirectErrorStream(true);
         try {
             Process process = processBuilder.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                logger.info("Gradle process failed with exit code {}", exitCode);
-            }
+            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            setUp(bufferedWriter);
+            writeToConsole(process, null);
         } catch (Exception e) {
-            logger.error("Error running Gradle command init", e);
+            logger.error("Error running Gradle command build", e);
         }
 
     }
 
-    public void runInit() {
+    public void runInit(CountDownLatch latch) {
 
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.directory(projectHome);
@@ -85,32 +98,16 @@ public class GradleWrapper {
         processBuilder.redirectErrorStream(true);
         try {
             Process process = processBuilder.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                logger.info("Gradle process failed with exit code {}", exitCode);
-            }
+            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            setUp(bufferedWriter);
+            writeToConsole(process, latch);
         } catch (Exception e) {
             logger.error("Error running Gradle command init", e);
         }
 
-        for (String file : new String[] {"src", "src/main", "src/test", "src/main/java",
-                "src/main/resources", "src/test/java", "src/test/resources"}) {
-            if (new File(projectHome, file).mkdir()) {
-                logger.info("Created {}", file);
-            } else {
-                logger.error("Failed to create {}", file);
-            }
-        }
-
     }
 
-    public void runWrapper() {
+    public void runWrapper(CountDownLatch latch) {
 
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.directory(projectHome);
@@ -118,19 +115,75 @@ public class GradleWrapper {
         processBuilder.redirectErrorStream(true);
         try {
             Process process = processBuilder.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                logger.info("Gradle process failed with exit code {}", exitCode);
-            }
+            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            setUp(bufferedWriter);
+            writeToConsole(process, null);
         } catch (Exception e) {
             logger.error("Error running Gradle command wrapper", e);
         }
+        latch.countDown();
+
+    }
+
+    public void writeToConsole(Process process, CountDownLatch latch) {
+
+        Thread outputThread = new Thread(() -> {
+            try (InputStream inputStream = process.getInputStream();
+                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream))) {
+
+                String line;
+                while ((line = bufferedReader.readLine()) != null) {
+                    // Update TextArea on JavaFX Application Thread
+                    String finalLine = line;
+                    Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "black"));
+                }
+            } catch (IOException e) {
+                logger.error(e);
+            }
+        });
+        outputThread.start();
+
+        Thread statusThread = new Thread(() -> {
+
+            try {
+                int exitCode = process.waitFor();
+                if (latch != null) {
+                    latch.countDown();
+                }
+                outputThread.join();
+                Platform.runLater(() -> textArea.appendText("\nProcess Finished with exit code " + exitCode + "\n"));
+            } catch (InterruptedException e) {
+                logger.error(e);
+            }
+
+        });
+        statusThread.start();
+
+    }
+
+    private static String getUserInput(ConsoleTextArea textArea) {
+
+        int caretPosition = textArea.getCaretPosition();
+        int start = caretPosition;
+
+        for (int i = caretPosition - 1; i >= 0; i--) {
+            String style = textArea.getStyleAtPosition(i);
+            if (style.contains("-fx-fill: green;")) {
+                start = i;
+            } else {
+                break;
+            }
+        }
+        return textArea.getText(start, caretPosition);
+
+    }
+
+    private static void appendStyledText(ConsoleTextArea textArea, String text, String color) {
+
+        int start = textArea.getLength();
+        textArea.appendText(text);
+        int end = textArea.getLength();
+        textArea.setStyle(start, end, "-fx-fill: " + color + ";");
 
     }
 

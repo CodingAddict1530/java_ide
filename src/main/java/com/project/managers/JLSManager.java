@@ -158,26 +158,18 @@ public class JLSManager {
             return;
         }
         initializeParams.setProcessId((int) pid);
-        Path root = Paths.get("C:\\Users\\hp\\NotAnIDE_Projects\\First");
-        workspaceFolders.add(new WorkspaceFolder(root.toUri().toString(), "First"));
-        initializeParams.setWorkspaceFolders(workspaceFolders);
 
-        // Define client capabilities
-        ClientCapabilities clientCapabilities = new ClientCapabilities();
-        clientCapabilities.setTextDocument(getTDCCapabilities());
-        clientCapabilities.setWorkspace(getWCCapabilities());
-
-        initializeParams.setCapabilities(clientCapabilities);
         CompletableFuture<InitializeResult> initializeFuture = languageServer.initialize(initializeParams);
         initializeFuture.thenAccept(result -> {
             logger.info("Initialization successful. Capabilities: {}", result.getCapabilities());
+
+            registerSync();
+            registerCompletion();
+            registerHover();
+            registerSignatureHelp();
+            registerDiagnostic();
+
             languageServer.initialized(new InitializedParams());
-            /*
-            languageClient.workspaceFolders().thenAccept(folders -> {
-                System.out.println("Workspace folders: " + folders);
-            });
-            */
-            sendDCWFN(languageServer, workspaceFolders);
         }).exceptionally(throwable -> {
             logger.fatal("Initialization failed: {}", throwable.getMessage());
             return null;
@@ -218,6 +210,14 @@ public class JLSManager {
 
     }
 
+    public static void didClose(Path path) {
+
+        TextDocumentIdentifier textDocumentIdentifier = new TextDocumentIdentifier(path.toUri().toString());
+        DidCloseTextDocumentParams params = new DidCloseTextDocumentParams(textDocumentIdentifier);
+        languageServer.getTextDocumentService().didClose(params);
+
+    }
+
     public static List<CompletionItem> complete(Path path, Position position) {
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -252,15 +252,106 @@ public class JLSManager {
 
     }
 
-    public static void sendDCWFN(LanguageServer languageServer, List<WorkspaceFolder> workspaceFolders) {
+    public static SignatureHelp getSignatureHelp(Path path, Position position) {
+
+        CountDownLatch latch = new CountDownLatch(1);
+
+        SignatureHelpParams params = new SignatureHelpParams();
+        params.setTextDocument(new TextDocumentIdentifier(path.toUri().toString()));
+        params.setPosition(position);
+
+        final SignatureHelp[] returnValue = new SignatureHelp[1];
+        CompletableFuture<SignatureHelp> futureSignatureHelp = languageServer.getTextDocumentService().signatureHelp(params);
+
+        // Handle the response
+        futureSignatureHelp.thenAccept(signatureHelp -> {
+            if (signatureHelp != null) {
+                // Process the signature help
+                returnValue[0] = signatureHelp;
+            } else {
+                System.out.println("No signature help available.");
+            }
+            latch.countDown();
+        }).exceptionally(ex -> {
+            System.err.println("Error while fetching signature help: " + ex.getMessage());
+            latch.countDown();
+            return null;
+        });
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            logger.error(e);
+        }
+
+        return returnValue[0];
+
+    }
+
+    public static void changeWorkSpaceFolder(String uri, String name, boolean add) {
+
+        for (WorkspaceFolder workspaceFolder : workspaceFolders) {
+            if (workspaceFolder.getUri().equals(uri)) {
+                return;
+            }
+        }
+        workspaceFolders.add(new WorkspaceFolder(uri, name));
+        sendDCWFN(add);
+
+    }
+
+    public static void sendDCWFN(boolean add) {
 
         DidChangeWorkspaceFoldersParams params = new DidChangeWorkspaceFoldersParams();
         WorkspaceFoldersChangeEvent event = new WorkspaceFoldersChangeEvent();
-        event.setAdded(workspaceFolders);
-        event.setRemoved(Collections.emptyList());
+        if (add) {
+            event.setAdded(workspaceFolders);
+            event.setRemoved(Collections.emptyList());
+        } else {
+            event.setAdded(Collections.emptyList());
+            event.setRemoved(workspaceFolders);
+        }
         params.setEvent(event);
 
         languageServer.getWorkspaceService().didChangeWorkspaceFolders(params);
+
+    }
+
+    public static void sendWillSave(String uri) {
+
+        // Create parameters for the willSave notification
+        WillSaveTextDocumentParams params = new WillSaveTextDocumentParams();
+        params.setTextDocument(new TextDocumentIdentifier(uri));
+        params.setReason(TextDocumentSaveReason.Manual); // Reason for the save event, e.g., TextDocumentSaveReason.Manual
+
+        // Send the willSave notification
+        languageServer.getTextDocumentService().willSave(params);
+
+    }
+
+    public static void sendDidSave(String uri, String content) {
+
+        // Create parameters for the didSave notification
+        DidSaveTextDocumentParams params = new DidSaveTextDocumentParams();
+        params.setText(content); // Optionally provide the document text if needed
+
+        // Set the URI of the document that was saved
+        params.setTextDocument(new TextDocumentIdentifier(uri));
+
+        // Send the didSave notification
+        languageServer.getTextDocumentService().didSave(params);
+
+    }
+
+    public static void sendDeletedFile(String uri) {
+
+        FileEvent fileEvent = new FileEvent(uri, FileChangeType.Deleted);
+
+        // Create DidChangeWatchedFilesParams with the file event
+        DidChangeWatchedFilesParams params = new DidChangeWatchedFilesParams(Collections.singletonList(fileEvent));
+
+        // Send the notification to the language server
+        languageServer.getWorkspaceService().didChangeWatchedFiles(params);
 
     }
 
@@ -270,17 +361,13 @@ public class JLSManager {
         if (diagnosticList.isEmpty()) {
             return;
         }
-        Diagnostic firstDiagnostic = diagnosticList.get(0);
-        System.out.println(firstDiagnostic);
-        diagnosticList.remove(0);
         for (Diagnostic diagnostic : diagnosticList) {
             Platform.runLater(() ->
                     {
                         try {
                             EditAreaUtility.processDiagnostic(diagnostic, Paths.get(new URI(diagnostics.getUri())));
-                        } catch (URISyntaxException e) {
+                        } catch (Exception e) {
                             logger.error(e);
-                            System.out.println(e.getMessage());
                         }
                     }
                     );
@@ -294,7 +381,7 @@ public class JLSManager {
         TextDocumentClientCapabilities textDocumentCapabilities = new TextDocumentClientCapabilities();
 
         // Synchronization
-        SynchronizationCapabilities syncCapabilities = new SynchronizationCapabilities(true, true, true, true);
+        SynchronizationCapabilities syncCapabilities = new SynchronizationCapabilities(true, false, true, true);
         textDocumentCapabilities.setSynchronization(syncCapabilities);
 
         // Completion
@@ -343,5 +430,95 @@ public class JLSManager {
         workspaceClientCapabilities.setConfiguration(true);
 
         return workspaceClientCapabilities;
+    }
+
+    public static void registerSync() {
+
+        TextDocumentSyncOptions syncOptions = new TextDocumentSyncOptions();
+        syncOptions.setOpenClose(true);
+        syncOptions.setChange(TextDocumentSyncKind.Incremental); // or Full
+        syncOptions.setWillSave(true);
+        syncOptions.setWillSaveWaitUntil(false);
+        syncOptions.setSave(new SaveOptions(true));
+
+        // Define the registration parameters
+        RegistrationParams params = new RegistrationParams();
+        params.setRegistrations(Collections.singletonList(
+                new Registration(
+                        "syncCapabilities", // Unique ID for the capability
+                        "textDocumentSync",
+                        syncOptions
+                )
+        ));
+
+        languageClient.registerCapability(params);
+
+    }
+
+    public static void registerCompletion() {
+
+        CompletionOptions completionOptions = new CompletionOptions();
+        completionOptions.setResolveProvider(true); // Whether the server supports resolving completion items
+        completionOptions.setTriggerCharacters(List.of(".", "(", "\"", "'", ":", "@", "[", "{", " "));
+
+        // Define the registration parameters
+        RegistrationParams params = new RegistrationParams();
+        params.setRegistrations(Collections.singletonList(
+                new Registration(
+                        "completionCapability", // Unique ID for the capability
+                        "textDocument/completion", // The capability to register
+                        completionOptions // Typically used with completion capabilities
+                )
+        ));
+        languageClient.registerCapability(params);
+
+    }
+
+    public static void registerHover() {
+
+        RegistrationParams params = new RegistrationParams();
+        params.setRegistrations(Collections.singletonList(
+                new Registration(
+                        "hoverCapability", // Unique ID for the capability
+                        "textDocument/hover", // The capability to register
+                        new HoverOptions() // Registration options for text documents
+                )
+        ));
+
+        languageClient.registerCapability(params);
+
+    }
+
+    public static void registerSignatureHelp() {
+
+        SignatureHelpOptions signatureHelpOptions = new SignatureHelpOptions();
+        // Optionally configure the SignatureHelpOptions if needed
+        signatureHelpOptions.setTriggerCharacters(Arrays.asList("(", ","));
+
+        // Define the registration parameters
+        RegistrationParams params = new RegistrationParams();
+        params.setRegistrations(Collections.singletonList(
+                new Registration(
+                        "signatureHelpCapability", // Unique ID for the capability
+                        "textDocument/signatureHelp", // The capability to register
+                        signatureHelpOptions // Registration options for text documents
+                )
+        ));
+        languageClient.registerCapability(params);
+
+    }
+
+    public static void registerDiagnostic() {
+
+        RegistrationParams params = new RegistrationParams();
+        params.setRegistrations(Collections.singletonList(
+                new Registration(
+                        "diagnosticCapability", // Unique ID for the capability
+                        "textDocument/publishDiagnostics", // The capability to register
+                        new DiagnosticRegistrationOptions() // Registration options for text documents
+                )
+        ));
+        languageClient.registerCapability(params);
+
     }
 }
