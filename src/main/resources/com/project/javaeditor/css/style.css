@@ -1,0 +1,158 @@
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-VariableFont_wght.ttf');
+}
+
+.label-focused {
+    -fx-background-color: #515453;
+}
+
+.tab-pane, .tree-view, .tree-cell {
+    -fx-background-color: #2d2e2e;
+}
+
+.tree-cell:hover, .tree-cell:selected {
+    -fx-background-color: #515453;
+}
+
+.tree-cell .tree-disclosure-node .arrow {
+    -fx-background-color: white;
+}
+
+.tab-pane .tab-header-area {
+    -fx-background-color: #2d2e2e;
+}
+
+.tab-pane .tab-header-background {
+    -fx-background-color: #2d2e2e;
+}
+
+.tab-pane .tab {
+    -fx-background-color: #2d2e2e;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: #515453;
+}
+
+.tab-pane .tab-content-area {
+    -fx-background-color: #2d2e2e;
+    -fx-padding: 10;
+}
+
+.split-pane {
+    -fx-padding: 0;
+}
+
+.split-pane > .split-pane-divider {
+    -fx-background-color: #424746;
+    -fx-padding: 1px;
+}
+
+.vertical-split-pane > .split-pane-divider {
+    -fx-background-color: #2d2e2e;
+}
+
+.footerBtn {
+    -fx-background-color: transparent;
+    -fx-padding: 5 10;
+    -fx-text-fill: white;
+}
+
+.menu-bar {
+    -fx-background-color: #424746;
+    -fx-padding: 0;
+}
+
+.context-menu {
+    -fx-padding: 0;
+}
+
+.menu-bar .menu .label {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+    -fx-padding: 5 10;
+}
+
+.menu-bar .menu:hover, .context-menu .menu:hover, .footerBtn:hover {
+    -fx-background-color: #515453;
+}
+
+.menu-bar .menu .menu-item, .context-menu .menu .menu-item, .context-menu .menu-item {
+    -fx-padding: 10px;
+    -fx-background-color: #424746;
+}
+
+.menu-bar .menu .menu-item:hover, .context-menu .menu .menu-item:hover, .context-menu .menu-item:hover {
+    -fx-background-color: #515453;
+}
+
+.menu-bar .menu .menu-item .label {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+    -fx-padding: 5 10;
+}
+
+.context-menu .menu .menu-item .label, .context-menu .menu-item .label {
+    -fx-text-fill: white;
+}
+
+.topBarBtn {
+    -fx-max-width: 20px;
+    -fx-max-height: 20px;
+}
+
+.runOptionBtn {
+    -fx-background-color: transparent;
+    -fx-padding: 5 10;
+}
+
+.runOptionBtn:hover {
+    -fx-background-color: #515453;
+}
+
+.close-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0.2em;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+    -fx-font-size: 12px;
+    -fx-text-fill: white;
+}
+
+.close-button:hover {
+    -fx-text-fill: red;
+}
+
+.custom-text-area {
+    -fx-font-size: 14px;
+}
+
+.inline-css-text-area-console {
+    -fx-font-size: 1.1em;
+}
+
+.inline-css-text-area-console, .custom-text-area {
+    -fx-padding: 1em;
+    -fx-font-family: 'JetBrains Mono';
+    -fx-background-color: #2d2e2e;
+    -fx-text-fill: #f0f0f0;
+}
+
+.inline-css-text-area-console .caret, .custom-text-area .caret {
+    -fx-stroke: white;
+}
+
+.tree-view .scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.tree-view .scroll-bar .increment-arrow-button, .tree-view .scroll-bar .decrement-arrow-button {
+    -fx-background-color: transparent;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+}
+
+.tree-view .scroll-bar .thumb {
+    -fx-background-color: #959493;
+}

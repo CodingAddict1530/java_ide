@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.Cursor?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/22" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.project.javaeditor.Controller">
+   <children>
+      <HBox>
+         <children>
+            <MenuBar fx:id="menuBar" prefHeight="27.0" prefWidth="100.0" HBox.hgrow="ALWAYS">
+              <menus>
+                <Menu mnemonicParsing="false" text="File">
+                  <items>
+                    <MenuItem fx:id="newFile" mnemonicParsing="false" onAction="#newFile" text="New File" />
+                        <MenuItem fx:id="openFile" mnemonicParsing="false" onAction="#openFile" text="Open File" />
+                        <MenuItem fx:id="saveFile" mnemonicParsing="false" onAction="#saveFile" text="Save File" />
+                        <MenuItem fx:id="closeFile" mnemonicParsing="false" onAction="#closeFile" text="Close File" />
+                  </items>
+                </Menu>
+                  <Menu mnemonicParsing="false" text="Project">
+                    <items>
+                        <MenuItem fx:id="newProject" mnemonicParsing="false" onAction="#newProject" text="New Project" />
+                        <MenuItem fx:id="openProject" mnemonicParsing="false" onAction="#openProject" text="Open Project" />
+                        <MenuItem fx:id="deleteProject" mnemonicParsing="false" onAction="#deleteProject" text="Delete Project" />
+                    </items>
+                  </Menu>
+                <Menu mnemonicParsing="false" text="Edit">
+                  <items>
+                    <MenuItem fx:id="cut" mnemonicParsing="false" onAction="#cut" text="Cut" />
+                        <MenuItem fx:id="copy" mnemonicParsing="false" onAction="#copy" text="Copy" />
+                        <MenuItem fx:id="paste" mnemonicParsing="false" onAction="#paste" text="Paste" />
+                        <MenuItem fx:id="undo" mnemonicParsing="false" onAction="#undo" text="Undo" />
+                        <MenuItem fx:id="redo" mnemonicParsing="false" onAction="#redo" text="Redo" />
+                  </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="Help">
+                  <items>
+                    <MenuItem mnemonicParsing="false" text="YIKES!" />
+                  </items>
+                </Menu>
+              </menus>
+            </MenuBar>
+            <HBox fx:id="titleBarOptions" prefHeight="27.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+               <children>
+                  <Label fx:id="projectName" text="Label" />
+                  <HBox fx:id="settingsOptions" prefHeight="100.0" prefWidth="200.0" />
+                  <HBox fx:id="runOptions" prefHeight="100.0" prefWidth="200.0" />
+               </children></HBox>
+            <HBox fx:id="titleBarButtons" prefHeight="27.0" prefWidth="111.0" />
+            <HBox fx:id="padHBox" maxWidth="6.0" prefHeight="27.0" prefWidth="6.0" />
+         </children>
+      </HBox>
+      <SplitPane fx:id="verticalSplitPane" dividerPositions="0.5" orientation="VERTICAL" prefHeight="200.0" prefWidth="160.0" VBox.vgrow="ALWAYS">
+         <items>
+            <SplitPane fx:id="splitPane" dividerPositions="0.5" prefHeight="200.0" prefWidth="200.0">
+               <items>
+                  <VBox fx:id="projectView" alignment="TOP_RIGHT" prefHeight="341.0" prefWidth="126.0" />
+                  <TabPane fx:id="tabPane" prefHeight="200.0" prefWidth="343.0" tabClosingPolicy="UNAVAILABLE" />
+               </items>
+            </SplitPane>
+            <HBox fx:id="console" prefWidth="200.0" />
+         </items>
+      </SplitPane>
+      <HBox fx:id="footer" prefHeight="27.0" prefWidth="600.0">
+         <children>
+            <HBox alignment="CENTER_LEFT" prefHeight="100.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+               <children>
+                  <HBox prefHeight="100.0" prefWidth="6.0" />
+                  <Label fx:id="filePath" text="Label" HBox.hgrow="ALWAYS" />
+                  <HBox alignment="CENTER_RIGHT" prefHeight="100.0" prefWidth="40.0" HBox.hgrow="ALWAYS">
+                     <children>
+                        <Label onMouseClicked="#openIcons8Link" text="Icons by Icons8" textFill="WHITE">
+                           <font>
+                              <Font size="13.0" />
+                           </font>
+                           <cursor>
+                              <Cursor fx:constant="HAND" />
+                           </cursor>
+                        </Label>
+                     </children>
+                  </HBox>
+               </children>
+            </HBox>
+            <HBox fx:id="footerRight" alignment="CENTER" minWidth="200.0" prefHeight="100.0" prefWidth="200.0" HBox.hgrow="ALWAYS" />
+         </children></HBox>
+   </children>
+</VBox>
