@@ -1,16 +1,26 @@
 package com.project.custom_classes;
 
 import com.project.utility.EditAreaUtility;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.GridPane;
 import org.fxmisc.richtext.InlineCssTextArea;
 
+import java.util.LinkedList;
 import java.util.Objects;
+import java.util.Stack;
 
 public class CustomTextArea extends InlineCssTextArea {
 
+    private static final int MAX_UNDO_REDO_ENTRIES = 1000;
     private final InlineCssTextArea innerTextArea = new InlineCssTextArea();
     private int moveCaret = 0;
+    private final LinkedList<TextAreaChange> undoStack = new LinkedList<>();
+    private final LinkedList<TextAreaChange> redoStack = new LinkedList<>();
 
     public CustomTextArea(Boolean isColored) {
 
@@ -22,6 +32,25 @@ public class CustomTextArea extends InlineCssTextArea {
             switch (event.getCode()) {
                 case TAB:
                     event.consume();
+                    if (EditAreaUtility.complitionTooltip.isShowing()) {
+                        if (EditAreaUtility.completionTooltipCurrentFocus < 0) {
+                            EditAreaUtility.completionTooltipCurrentFocus = 0;
+                        }
+                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent());
+                        Label label = ((Label) gp.getChildren().get(
+                                EditAreaUtility.completionTooltipCurrentFocus
+                        ));
+                        for (int i = this.getCaretPosition() - 1; i >= 0; i--) {
+                            if (Character.isLetterOrDigit(this.getText().charAt(i))) {
+                                this.replaceText(i, i + 1, "");
+                            } else {
+                                break;
+                            }
+                        }
+                        this.replaceText(this.getCaretPosition(), this.getCaretPosition(), label.getText().split(" ")[0]);
+                        EditAreaUtility.complitionTooltip.hide();
+                        break;
+                    }
                     this.replaceText(caretPosition, caretPosition, "    ");
                     this.moveTo(caretPosition + 4);
                     break;
@@ -35,7 +64,67 @@ public class CustomTextArea extends InlineCssTextArea {
                         this.replaceText(caretPosition, caretPosition + 1, "");
                     }
                     break;
-
+                case DOWN:
+                    if (EditAreaUtility.complitionTooltip.isShowing()) {
+                        event.consume();
+                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent());
+                        if (EditAreaUtility.completionTooltipCurrentFocus >= gp.getChildren().size() - 1) {
+                            EditAreaUtility.completionTooltipCurrentFocus = -1;
+                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(0);
+                        }
+                        gp.getChildren().get(
+                                (EditAreaUtility.completionTooltipCurrentFocus < 0) ?
+                                        gp.getChildren().size() - 1 : EditAreaUtility.completionTooltipCurrentFocus
+                        ).getStyleClass().remove("label-focused");
+                        gp.getChildren().get(
+                                ++EditAreaUtility.completionTooltipCurrentFocus
+                        ).getStyleClass().add("label-focused");
+                        if (EditAreaUtility.completionTooltipCurrentFocus % 10 == 0 && EditAreaUtility.completionTooltipCurrentFocus != 0) {
+                            double scrollAmount = 1.0 / ((gp.getChildren().size() % 10 != 0) ?
+                                    (gp.getChildren().size() / 10) + 1 :
+                                    (gp.getChildren().size() / 10));
+                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(
+                                    (((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() + scrollAmount > 1) ?
+                                            1 :
+                                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() + scrollAmount
+                            );
+                        }
+                    }
+                    break;
+                case UP:
+                    if (EditAreaUtility.complitionTooltip.isShowing()) {
+                        event.consume();
+                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent());
+                        if (EditAreaUtility.completionTooltipCurrentFocus <=  0) {
+                            EditAreaUtility.completionTooltipCurrentFocus = gp.getChildren().size();
+                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(1);
+                        }
+                        gp.getChildren().get(
+                                (EditAreaUtility.completionTooltipCurrentFocus >= gp.getChildren().size()) ?
+                                        0 : EditAreaUtility.completionTooltipCurrentFocus
+                        ).getStyleClass().remove("label-focused");
+                        gp.getChildren().get(
+                                --EditAreaUtility.completionTooltipCurrentFocus
+                        ).getStyleClass().add("label-focused");
+                        if (EditAreaUtility.completionTooltipCurrentFocus % 10 == 0 && EditAreaUtility.completionTooltipCurrentFocus != gp.getChildren().size() - 1) {
+                            double scrollAmount = 1.0 / ((gp.getChildren().size() % 10 != 0) ?
+                                    (gp.getChildren().size() / 10) + 1 :
+                                    (gp.getChildren().size() / 10));
+                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(
+                                    (((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() - scrollAmount < 0) ?
+                                            0 :
+                                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() - scrollAmount
+                            );
+                        }
+                    }
+                    break;
+            }
+            if (new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN).match(event)) {
+                event.consume();
+                EditAreaUtility.undo(this, true);
+            } else if (new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN).match(event)) {
+                event.consume();
+                EditAreaUtility.undo(this, false);
             }
         });
 
@@ -226,6 +315,32 @@ public class CustomTextArea extends InlineCssTextArea {
         }
 
         return indent.toString();
+    }
+
+    public void pushUndo(TextAreaChange change) {
+
+        this.undoStack.addLast(change);
+        if (this.undoStack.size() > MAX_UNDO_REDO_ENTRIES) {
+            this.undoStack.removeFirst();
+        }
+    }
+
+    public TextAreaChange popUndo() {
+
+        return this.undoStack.pollLast();
+    }
+
+    public void pushRedo(TextAreaChange change) {
+
+        this.redoStack.addLast(change);
+        if (this.redoStack.size() > MAX_UNDO_REDO_ENTRIES) {
+            this.redoStack.removeFirst();
+        }
+    }
+
+    public TextAreaChange popRedo() {
+
+        return this.redoStack.pollLast();
     }
 
 }
