@@ -5,17 +5,16 @@ import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.kordamp.ikonli.fontawesome5.FontAwesomeRegular;
-import org.kordamp.ikonli.javafx.FontIcon;
 import com.project.utility.MainUtility;
 
 import java.io.File;
@@ -126,12 +125,14 @@ public class DirectoryManager {
     public static TreeView<HBox> createTree(RootTreeNode root) {
 
         HBox hBox = new HBox();
-        FontIcon icon = new FontIcon(FontAwesomeRegular.FOLDER_OPEN);
-        icon.setIconColor(Color.RED);
+        ImageView icon = new ImageView(
+                    new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/folder.png"))));
+        MainUtility.sizeImage(icon, 18, 18);
         hBox.getChildren().add(icon);
         hBox.getChildren().add(new CustomTreeLabel("  " + root.getName(), root.getPath()));
         hBox.setAlignment(Pos.CENTER_LEFT);
         CustomTreeItem<HBox> rootItem = new CustomTreeItem<>(hBox, root.getPath());
+
         if (nodeIsOpen.containsKey(rootItem)) {
             rootItem.setExpanded(nodeIsOpen.get(rootItem));
         } else {
@@ -170,14 +171,17 @@ public class DirectoryManager {
                 if (empty || item == null) {
                     setGraphic(null);
                     setContextMenu(null);
+                    setDisable(true);
                 } else {
-                    FontIcon icon = (FontIcon) item.getChildren().get(0);
                     CustomTreeLabel label = (CustomTreeLabel) item.getChildren().get(1);
+                    label.setStyle("-fx-text-fill: white;");
                     Path path = label.getPath();
                     setGraphic(item);
+                    setDisable(false);
 
                     ContextMenu contextMenu = new ContextMenu();
-                    if (icon.getIconCode() == FontAwesomeRegular.FOLDER_OPEN) {
+                    contextMenu.getStyleClass().add("context-menu");
+                    if (path.toFile().isDirectory()) {
                         Menu newItem = new Menu("New");
 
                         Menu fileItem = new Menu("Java File");
@@ -215,8 +219,6 @@ public class DirectoryManager {
                         renameItem.setOnAction(event -> DirectoryManager.renameDirectory(path));
                         contextMenu.getItems().addAll(newItem, deleteItem, cutItem, copyItem, pasteItem, renameItem);
                     } else {
-                        MenuItem runItem = new MenuItem("Run");
-                        runItem.setOnAction(event -> FileManager.runFile(path));
                         MenuItem deleteItem = new MenuItem("Delete");
                         deleteItem.setOnAction(event -> FileManager.deleteFile(path, false));
                         MenuItem cutItem = new MenuItem("Cut");
@@ -227,7 +229,7 @@ public class DirectoryManager {
                         pasteItem.setOnAction(event -> FileManager.pasteIntoFile(path));
                         MenuItem renameItem = new MenuItem("Rename");
                         renameItem.setOnAction(event -> FileManager.renameFile(path));
-                        contextMenu.getItems().addAll(runItem, deleteItem, cutItem, copyItem, pasteItem, renameItem);
+                        contextMenu.getItems().addAll(deleteItem, cutItem, copyItem, pasteItem, renameItem);
                     }
 
                     setContextMenu(contextMenu);
@@ -261,12 +263,11 @@ public class DirectoryManager {
     private static void add(CustomTreeItem<HBox> parentItem, TreeNode childNode) {
         HBox hBox = new HBox();
         String[] parts = childNode.getName().split("\\.");
-        FontIcon icon = new FontIcon((childNode instanceof DirectoryTreeNode) ?
-                FontAwesomeRegular.FOLDER_OPEN :
-                (Objects.equals(parts[parts.length - 1], "java")) ? FontAwesomeRegular.FILE_CODE :
-                        FontAwesomeRegular.FILE);
-        icon.setIconColor((childNode instanceof DirectoryTreeNode) ? Color.GREEN :
-                (Objects.equals(parts[parts.length - 1], "java")) ? Color.PURPLE : Color.GRAY);
+        ImageView icon = new ImageView((childNode instanceof DirectoryTreeNode) ?
+                new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/folder.png"))) :
+                (Objects.equals(parts[parts.length - 1], "java")) ? new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/java.png"))) :
+                        new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/file.png"))));
+        MainUtility.sizeImage(icon, 18, 18);
         hBox.getChildren().add(icon);
         hBox.getChildren().add(new CustomTreeLabel("  " + childNode.getName(), childNode.getPath()));
         hBox.setAlignment(Pos.CENTER_LEFT);

@@ -30,10 +30,7 @@ public class FileManager {
     private static final Logger logger = LogManager.getLogger(FileManager.class);
 
     private static TabPane tabPane;
-    private static ArrayList<Path> openProjectPath;
     private static FileChooser fileChooser;
-    private static HBox console;
-    private static SplitPane verticalSplitPane;
     private static Clipboard clipboard;
     private static ArrayList<Boolean> shouldCut;
 
@@ -62,6 +59,7 @@ public class FileManager {
         HBox header = new HBox();
         header.setAlignment(javafx.geometry.Pos.CENTER);
         Label headerLabel = new Label(new File(path).getName() + "     ");
+        headerLabel.setStyle("-fx-text-fill: white");
         Button closeBtn = new Button("x");
         closeBtn.getStyleClass().add("close-button");
         closeBtn.setOnAction(event -> closeFile(newTab));
@@ -77,7 +75,7 @@ public class FileManager {
             if (node instanceof Label label) {
                 label.setFont(Font.font("Roboto", FontWeight.BOLD, 13));
                 label.setAlignment(Pos.CENTER_RIGHT);
-                label.setStyle("-fx-padding: 0 5 0 0; -fx-background-color: white;");
+                label.setStyle("-fx-padding: 0 5 0 0; -fx-background-color: #2d2e2e; -fx-text-fill: white");
             }
             return node;
         };
@@ -153,6 +151,7 @@ public class FileManager {
             fileChooser.getExtensionFilters().addAll(
                     new FileChooser.ExtensionFilter("Java files", "*.java")
             );
+            fileChooser.setInitialDirectory(ProjectManager.getCurrentProject().getPath().toFile());
             file = fileChooser.showOpenDialog(tabPane.getScene().getWindow());
             path = file.toPath();
         } else {
@@ -197,6 +196,9 @@ public class FileManager {
 
     public static void newJavaFile(Path path, String extraKeyWord) {
 
+        if (path == null) {
+            path = new File(ProjectManager.getCurrentProject().getPath().toString(), "src\\main\\java").toPath();
+        }
         String[] splitName = path.toString().split("\\\\");
         boolean found = false;
         for (String s : splitName) {
@@ -297,26 +299,6 @@ public class FileManager {
 
         newJavaFile(path, "@interface ");
 
-    }
-
-    public static void runFile(Path path) {
-
-        verticalSplitPane.setDividerPositions(0.7);
-        ConsoleTextArea consoleTextArea = (ConsoleTextArea) console.getChildren().get(0);
-        consoleTextArea.unprotectText();
-        consoleTextArea.replaceText("");
-        consoleTextArea.protectText();
-        switch (JavaCodeExecutor.run(path.toFile(), ProjectManager.getCurrentProject())) {
-            case 1:
-                logger.info("Couldn't read {} to execute", path.toString());
-                break;
-            case 2:
-                logger.info("Compilation of {} failed", path.toString());
-                break;
-            case 3:
-                logger.info("Couldn't delete .class file of {}", path.toString());
-                break;
-        }
     }
 
     public static void deleteFile(Path path, boolean skipConfirm) {
@@ -469,21 +451,6 @@ public class FileManager {
     public static void setFileChooser(FileChooser fileChooser) {
 
         FileManager.fileChooser = fileChooser;
-    }
-
-    public static void setConsole(HBox console) {
-
-        FileManager.console = console;
-    }
-
-    public static void setVerticalSplitPane(SplitPane verticalSplitPane) {
-
-        FileManager.verticalSplitPane = verticalSplitPane;
-    }
-
-    public static void setOpenProjectPath(ArrayList<Path> openProjectPath) {
-
-        FileManager.openProjectPath = openProjectPath;
     }
 
     public static void setClipboard(Clipboard clipboard) {

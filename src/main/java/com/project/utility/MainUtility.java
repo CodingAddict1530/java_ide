@@ -3,11 +3,15 @@ package com.project.utility;
 import com.project.custom_classes.CustomFile;
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
+import com.project.managers.ProjectManager;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.scene.control.*;
 import com.project.managers.FileManager;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import javafx.util.Duration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,6 +20,7 @@ import java.io.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Optional;
 
 public class MainUtility {
@@ -80,8 +85,7 @@ public class MainUtility {
 
     public static boolean checkAndFix() {
 
-        String home = System.getProperty("user.home");
-        File appHome = new File(home, "NotAnIDE_Projects");
+        File appHome = ProjectManager.APP_HOME;
         if (!appHome.exists()) {
             if (appHome.mkdir()) {
                 logger.info("App home directory created");
@@ -115,6 +119,11 @@ public class MainUtility {
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(text);
+        ImageView confirmImage =new ImageView(new Image(Objects.requireNonNull(MainUtility.class.getResourceAsStream("icons/warning.png"))));
+        sizeImage(confirmImage, 50, 50);
+        alert.setGraphic(confirmImage);
+        alert.initStyle(StageStyle.UNDECORATED);
+        alert.getDialogPane().getStylesheets().add(Objects.requireNonNull(MainUtility.class.getResource("css/alert-style.css")).toExternalForm());
         Optional<ButtonType> result = alert.showAndWait();
         return (result.isPresent() && result.get() == ButtonType.OK);
 
@@ -157,6 +166,15 @@ public class MainUtility {
         // Play both transitions simultaneously
         fadeIn.play();
         scaleUp.play();
+
+    }
+
+    public static void sizeImage(ImageView image, int width, int height) {
+
+        image.setFitWidth(width);
+        image.setFitHeight(height);
+        image.setPreserveRatio(true);
+        image.setSmooth(true);
 
     }
 

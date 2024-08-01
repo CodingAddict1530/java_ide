@@ -1,5 +1,7 @@
 package com.project.managers;
 
+import com.project.custom_classes.OpenFile;
+import com.project.custom_classes.OpenFilesTracker;
 import com.project.utility.EditAreaUtility;
 import com.project.utility.LanguageStatusParams;
 import javafx.application.Platform;
@@ -29,73 +31,114 @@ public class JLSManager {
 
     private static final Logger logger = LogManager.getLogger(JLSManager.class);
 
-    private static Process process;
     private static LanguageServer languageServer;
-    private static InputStream inputStream;
-    private static OutputStream outputStream;
-    private static ArrayList<WorkspaceFolder> workspaceFolders = new ArrayList<>();
+    private static final ArrayList<WorkspaceFolder> workspaceFolders = new ArrayList<>();
     private static final LanguageClient languageClient = new LanguageClient() {
-
 
         @Override
         public void telemetryEvent(Object o) {
-
-            System.out.println("Telemetry event: " + o);
+            try {
+                System.out.println("Telemetry event: " + o);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
         }
 
         @Override
         public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
-
-            handleDiagnostics(diagnostics);
+            try {
+                handleDiagnostics(diagnostics);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
         }
 
         @Override
         public void showMessage(MessageParams messageParams) {
-
-            System.out.println("Message: " + messageParams);
+            try {
+                System.out.println("Message: " + messageParams);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
         }
 
         @Override
         public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams requestParams) {
-
-            System.out.println("Message request: " + requestParams.getMessage());
+            try {
+                System.out.println("Message request: " + requestParams.getMessage());
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
             return null;
         }
 
         @Override
         public CompletableFuture<Void> registerCapability(RegistrationParams params) {
-
-            System.out.println("Registered Capabilities: " + params);
-            return CompletableFuture.completedFuture(null);
+            try {
+                System.out.println("Registered Capabilities: " + params);
+                return CompletableFuture.completedFuture(null);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+                return null;
+            }
         }
 
         @Override
         public CompletableFuture<Void> unregisterCapability(UnregistrationParams params) {
-
-            System.out.println("Unregistered Capabilities: " + params);
-            return CompletableFuture.completedFuture(null);
+            try {
+                System.out.println("Unregistered Capabilities: " + params);
+                return CompletableFuture.completedFuture(null);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+                return null;
+            }
         }
 
         @Override
         public CompletableFuture<java.util.List<WorkspaceFolder>> workspaceFolders() {
-
-            return CompletableFuture.completedFuture(workspaceFolders);
+            try {
+                return CompletableFuture.completedFuture(workspaceFolders);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+                return null;
+            }
         }
 
         @Override
         public void logMessage(MessageParams messageParams) {
-
-            logger.info("Message: {}", messageParams);
+            try {
+                logger.info("Message: {}", messageParams);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
         }
 
         @JsonNotification("language/status")
         public void languageStatus(LanguageStatusParams params) {
-            System.out.println("Language status: " + params);
+            try {
+                System.out.println("Language status: " + params);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
         }
 
         @JsonNotification("language/eventNotification")
         public void languageEventNotification(Object params) {
-            System.out.println("Language event notif: " + params);
+            try {
+                System.out.println("Language event notif: " + params);
+            } catch (Exception e) {
+                logger.error(e);
+                resetServer();
+            }
         }
 
     };
@@ -104,6 +147,26 @@ public class JLSManager {
 
         try {
 
+            String config = "";
+            if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+                config = "config_win";
+            } else if (System.getProperty("os.name").toLowerCase().contains("linux")) {
+                if (System.getProperty("os.arch").toLowerCase().contains("arm")) {
+                    config = "config_linux_arm";
+                } else {
+                    config = "config_linux";
+                }
+            } else if (System.getProperty("os.name").toLowerCase().contains("mac")) {
+                if (System.getProperty("os.arch").toLowerCase().contains("arm")) {
+                    config = "config_mac_arm";
+                } else {
+                    config = "config_mac";
+                }
+            }
+            if (config.isEmpty()) {
+                logger.fatal("OS NOT DETERMINED!");
+                return;
+            }
             String[] command = {
                     "java",
                     "-Declipse.application=org.eclipse.jdt.ls.core.id1",
@@ -115,15 +178,15 @@ public class JLSManager {
                     "--add-opens", "java.base/java.util=ALL-UNNAMED",
                     "--add-opens", "java.base/java.lang=ALL-UNNAMED",
                     "-jar", "lib/jdt-language-server-1.37.0-202406271335/plugins/org.eclipse.equinox.launcher_1.6.900.v20240613-2009.jar",
-                    "-configuration", "lib/jdt-language-server-1.37.0-202406271335/config_win",
+                    "-configuration", "lib/jdt-language-server-1.37.0-202406271335/" + config,
                     "-data", "jdt_data"
             };
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             processBuilder.redirectErrorStream(true);
 
-            process = processBuilder.start();
-            inputStream = process.getInputStream();
-            outputStream = process.getOutputStream();
+            Process process = processBuilder.start();
+            InputStream inputStream = process.getInputStream();
+            OutputStream outputStream = process.getOutputStream();
 
             Launcher<LanguageServer> launcher = LSPLauncher.createClientLauncher(languageClient, inputStream, outputStream);
             launcher.startListening();
@@ -136,9 +199,12 @@ public class JLSManager {
 
     public static void stopServer() {
 
+        for (OpenFile o : OpenFilesTracker.getOpenFiles()) {
+            JLSManager.didClose(o.getFile().toPath());
+        }
         try {
             if (languageServer != null) {
-                System.out.println("KK: " + languageServer.shutdown().get());
+                languageServer.shutdown().get();
                 languageServer.exit();
             }
         }catch (Exception e) {
@@ -274,6 +340,42 @@ public class JLSManager {
             latch.countDown();
         }).exceptionally(ex -> {
             System.err.println("Error while fetching signature help: " + ex.getMessage());
+            latch.countDown();
+            return null;
+        });
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            logger.error(e);
+        }
+
+        return returnValue[0];
+
+    }
+
+    public static Hover getHover(Path path, Position position) {
+
+        CountDownLatch latch = new CountDownLatch(1);
+
+        HoverParams params = new HoverParams();
+        params.setTextDocument(new TextDocumentIdentifier(path.toUri().toString()));
+        params.setPosition(position);
+
+        final Hover[] returnValue = new Hover[1];
+        CompletableFuture<Hover> futureHover = languageServer.getTextDocumentService().hover(params);
+
+        // Handle the response
+        futureHover.thenAccept(hover -> {
+            if (hover != null) {
+                // Process the hover information
+                returnValue[0] = hover;
+            } else {
+                System.out.println("No hover information available.");
+            }
+            latch.countDown();
+        }).exceptionally(ex -> {
+            System.err.println("Error while fetching hover information: " + ex.getMessage());
             latch.countDown();
             return null;
         });
@@ -430,6 +532,24 @@ public class JLSManager {
         workspaceClientCapabilities.setConfiguration(true);
 
         return workspaceClientCapabilities;
+    }
+
+    private static void resetServer() {
+
+        FileManager.saveFiles(OpenFilesTracker.getOpenFiles());
+        stopServer();
+        startServer();
+        for (OpenFile o: OpenFilesTracker.getOpenFiles()) {
+            StringBuilder text = new StringBuilder();
+            ArrayList<String> lines = FileManager.readFile(o.getFile().toPath());
+            if (lines != null) {
+                for (String line : lines) {
+                    text.append(line).append("\n");
+                }
+            }
+            JLSManager.didOpen(o.getFile().toPath(), text.toString());
+        }
+
     }
 
     public static void registerSync() {

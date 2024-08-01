@@ -1,5 +1,7 @@
 package com.project.javaeditor;
 
+import com.project.custom_classes.OpenFile;
+import com.project.custom_classes.OpenFilesTracker;
 import com.project.managers.JLSManager;
 import com.project.utility.MainUtility;
 import javafx.fxml.FXMLLoader;

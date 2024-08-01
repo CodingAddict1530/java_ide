@@ -36,7 +36,7 @@ public class GradleWrapper {
                     System.out.println(e.getMessage());
                 }
                 textArea.setStyle(textArea.getCaretPosition(), textArea.getCaretPosition(),
-                        "-fx-fill: black;");
+                        "-fx-fill: white;");
             };
 
         });
@@ -135,7 +135,7 @@ public class GradleWrapper {
                 while ((line = bufferedReader.readLine()) != null) {
                     // Update TextArea on JavaFX Application Thread
                     String finalLine = line;
-                    Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "black"));
+                    Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "white"));
                 }
             } catch (IOException e) {
                 logger.error(e);

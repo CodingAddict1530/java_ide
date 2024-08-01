@@ -2,19 +2,38 @@ package com.project.utility;
 
 import com.project.custom_classes.CustomTextArea;
 import com.project.custom_classes.OpenFilesTracker;
+import com.project.custom_classes.TextAreaChange;
+import com.project.custom_classes.diff_match_patch;
 import com.project.managers.JLSManager;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.geometry.Point2D;
 import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.input.*;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import com.project.managers.TextManager;
-import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.SignatureHelp;
+import javafx.scene.text.Text;
+import org.eclipse.lsp4j.*;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.fxmisc.richtext.event.MouseOverTextEvent;
+import org.fxmisc.richtext.model.PlainTextChange;
+import org.fxmisc.richtext.model.TextChange;
+import org.fxmisc.undo.UndoManagerFactory;
 
+import java.awt.*;
+import java.lang.reflect.Array;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,56 +94,216 @@ public class EditAreaUtility {
             "@interface"
     ));
 
+    private static Button goToBtn;
+
     private static final ArrayList<Character> completionTriggers = new ArrayList<>(List.of('.', '(', '"', '\'', ':', '@', '[', '{', ' '));
 
     private static final ArrayList<Character> sHelpTriggers = new ArrayList<>(List.of('(', ','));
 
-    private static final ArrayList<EventHandler<MouseEvent>> mouseEvents = new ArrayList<>();
+    private static final Tooltip tooltip = new Tooltip();
+    static {
+        tooltip.setWrapText(true);
+        tooltip.setMaxHeight(300);
+        tooltip.setMaxWidth(500);
+    }
 
+    public static int completionTooltipCurrentFocus = -1;
+    public static final Tooltip complitionTooltip = new Tooltip();
+    static {
+        complitionTooltip.setOnHiding(event -> completionTooltipCurrentFocus = 0);
+    }
+
+    private static final ArrayList<EventHandler<MouseEvent>> mouseEvents = new ArrayList<>();
     private static final Map<Tab, Integer> currentVersions = new HashMap<>();
+
+    private static boolean isUndo = false;
+    private static boolean isRedo = false;
 
     public static void addEventHandler(CustomTextArea textArea, Tab tab) {
 
         currentVersions.put(tab, 1);
+        textArea.setUndoManager(null);
         textArea.getInnerTextArea().textProperty().addListener((observable, oldValue, newValue) -> {
 
+            if (!isRedo && !isUndo) {
+                while (textArea.popRedo() != null) {}
+            }
+            if (isRedo) {
+                isUndo = false;
+            }
+            if (!isUndo) {
+                diff_match_patch dmp = new diff_match_patch();
+                LinkedList<diff_match_patch.Diff> diffs = dmp.diff_main(oldValue, newValue);
+                dmp.diff_cleanupSemantic(diffs);
+                int index = 0;
+                for (diff_match_patch.Diff diff : diffs) {
+                    if (diff.operation == diff_match_patch.Operation.EQUAL) {
+                        index = diff.text.length();
+                    } else {
+                        textArea.pushUndo(new TextAreaChange(diff.operation, diff.text, index));
+                    }
+
+                }
+            } else {
+                isUndo = false;
+            }
+
             if (!Objects.equals(oldValue, newValue)) {
+                int size = mouseEvents.size();
+                for (int i = 0; i < size; i++) {
+                    textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
+                    mouseEvents.remove(0);
+                }
+                if (complitionTooltip.isShowing()) {
+                    complitionTooltip.hide();
+                }
                 currentVersions.replace(tab, currentVersions.get(tab) + 1);
                 JLSManager.didChange(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), newValue, currentVersions.get(tab));
-                if (textArea.getCaretPosition() > 0) {
+                new Thread(() -> {
+                    if (textArea.getCaretPosition() > 0) {
                     List<CompletionItem> items = null;
-                    if (sHelpTriggers.contains(textArea.getInnerTextArea().getText().charAt(textArea.getCaretPosition() - 1))) {
-                        SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea));
-                        System.out.println(s);
-                    } else if (completionTriggers.contains(textArea.getInnerTextArea().getText().charAt(textArea.getCaretPosition() - 1))) {
-                        items = JLSManager.complete(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea));
+                    char currentChar = textArea.getInnerTextArea().getText().charAt(textArea.getInnerTextArea().getCaretPosition() - 1);
+                    if (sHelpTriggers.contains(currentChar)) {
+                        SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
+                    } else if (completionTriggers.contains(currentChar) || Character.isAlphabetic(currentChar)) {
+                        items = JLSManager.complete(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
                     }
                     if (items != null) {
-                        Tooltip complitionTooltip = getCompletionTooltip(items);
-                        if (!complitionTooltip.isShowing()) {
+                        List<CompletionItem> finalItems = items;
+                        Platform.runLater(() -> {
+                            populateCompletionTooltip(finalItems, textArea);
+                            if (((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent()).getChildren().isEmpty()) {
+                                return;
+                            }
+                            if (complitionTooltip.isShowing()) {
+                                complitionTooltip.hide();
+                            }
                             textArea.getCaretBounds().ifPresent(bounds -> {
                                 Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
                                 complitionTooltip.show(textArea, pos2D.getX(), pos2D.getY());
                             });
-
-                        }
+                        });
                     }
 
                 }
+                }).start();
 
                 if (Boolean.TRUE.equals(OpenFilesTracker.isSaved(tab))) {
                     OpenFilesTracker.getOpenFile(tab).setIsSaved(false);
                     HBox header = (HBox) tab.getGraphic();
                     header.getChildren().remove(0);
-                    header.getChildren().add(0, new Label("* " +
-                            OpenFilesTracker.getOpenFile(tab).getFile().getName() + "     "));
+                    Label headerLabel = new Label("* " +
+                            OpenFilesTracker.getOpenFile(tab).getFile().getName() + "     ");
+                    headerLabel.setStyle("-fx-text-fill: white");
+                    header.getChildren().add(0, headerLabel);
                 }
             }
         });
+        textArea.getInnerTextArea().caretPositionProperty().addListener((observable, oldValue, newValue) -> {
+            int line = getPosition(textArea, textArea.getCaretPosition()).getLine();
+            int character = getPosition(textArea, textArea.getCaretPosition()).getCharacter();
+            goToBtn.setText(String.format("%d:%d", line + 1, character));
+        });
+        textArea.setMouseOverTextDelay(Duration.ofMillis(300));
+        textArea.addEventHandler(MouseOverTextEvent.MOUSE_OVER_TEXT_BEGIN, event -> {
+            int index = event.getCharacterIndex();
+            if (index > 0 && index < textArea.getLength()) {
+                new Thread(() -> {
+                    Hover hoverResult = JLSManager.getHover(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, index));
+                    if (hoverResult != null) {
+                        if (hoverResult.getContents() != null) {
+                            if (hoverResult.getContents().getRight() != null) {
+                                Platform.runLater(() -> {
+                                    tooltip.setText(hoverResult.getContents().getRight().getValue());
+                                    if (tooltip.getText().isEmpty()) {
+                                        return;
+                                    }
+                                    Tooltip.install(textArea, tooltip);
+                                    textArea.getCaretBounds().ifPresent(bounds -> {
+                                        Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                                        tooltip.show(textArea, pos2D.getX(), pos2D.getY());
+                                    });
+                                });
+                            } else if (hoverResult.getContents().getLeft() != null) {
+                                for (Either<String, MarkedString> obj : hoverResult.getContents().getLeft()) {
+                                    if (obj.getRight() != null) {
+                                        Platform.runLater(() -> {
+                                            tooltip.setText(obj.getRight().getValue());
+                                            if (tooltip.getText().isEmpty()) {
+                                                return;
+                                            }
+                                            Tooltip.install(textArea, tooltip);
+                                            textArea.getCaretBounds().ifPresent(bounds -> {
+                                                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                                                tooltip.show(textArea, pos2D.getX(), pos2D.getY());
+                                            });
+                                        });
+                                    } else if (obj.getLeft() != null) {
+                                        Platform.runLater(() -> {
+                                            tooltip.setText(obj.getLeft());
+                                            if (tooltip.getText().isEmpty()) {
+                                                return;
+                                            }
+                                            Tooltip.install(textArea, tooltip);
+                                            textArea.getCaretBounds().ifPresent(bounds -> {
+                                                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                                                tooltip.show(textArea, pos2D.getX(), pos2D.getY());
+                                            });
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }).start();
+            }
+        });
+        textArea.addEventHandler(MouseOverTextEvent.MOUSE_OVER_TEXT_END, event -> {
+            tooltip.hide();
+            Tooltip.uninstall(textArea, tooltip);
+        });
+        textArea.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
+            if (complitionTooltip.isShowing()) {
+                complitionTooltip.hide();
+            }
+        });
+    }
+
+    public static void undo(CustomTextArea textArea, boolean undo) {
+
+        TextAreaChange previous;
+        previous = (undo) ? textArea.popUndo() : textArea.popRedo();
+        if (previous != null) {
+            if (previous.operation() == diff_match_patch.Operation.INSERT) {
+                if (undo) {
+                    isUndo = true;
+                    textArea.pushRedo(new TextAreaChange(diff_match_patch.Operation.DELETE, previous.text(), previous.newPosition()));
+                } else {
+                    isRedo = true;
+                }
+                textArea.replaceText(
+                        previous.newPosition(),
+                        previous.newPosition() + previous.text().length(),
+                        ""
+                );
+            } else {
+                if (undo) {
+                    isUndo = true;
+                    textArea.pushRedo(new TextAreaChange(diff_match_patch.Operation.INSERT, previous.text(), previous.newPosition()));
+                } else {
+                    isRedo = true;
+                }
+                textArea.replaceText(
+                        previous.newPosition(),
+                        previous.newPosition(),
+                        previous.text()
+                );
+            }
+        }
 
     }
 
-    private static org.eclipse.lsp4j.Position getPosition(CustomTextArea textArea) {
+    private static org.eclipse.lsp4j.Position getPosition(CustomTextArea textArea, Integer index) {
 
         String text = textArea.getInnerTextArea().getText();
         int lineCount = 0;
@@ -135,37 +314,50 @@ public class EditAreaUtility {
                 lineCount++;
                 charCount = 0;
             }
-            if (i == textArea.getCaretPosition() - 1) {
+            if (i == ((index == null) ? textArea.getInnerTextArea().getCaretPosition(): index) - 1) {
                 break;
             }
         }
 
-        return new org.eclipse.lsp4j.Position(lineCount, charCount - 1);
+        return new org.eclipse.lsp4j.Position(lineCount, charCount);
     }
 
-    private static Tooltip getCompletionTooltip(List<CompletionItem> items) {
+    private static void populateCompletionTooltip(List<CompletionItem> items, CustomTextArea textArea) {
 
-        StringBuilder tooltipText = new StringBuilder();
-        for (CompletionItem item : items) {
-            tooltipText.append(item.getLabel()).append("\n\n");
+        GridPane gridPane = new GridPane();
+        gridPane.setStyle("-fx-background: black;-fx-fill: white");
+        for (int i = 0; i < items.size(); i++) {
+            Label lineLabel = new Label(items.get(i).getLabel());
+            lineLabel.setStyle("-fx-padding: 6px;-fx-font-size: 12px");
+            lineLabel.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 1) {
+                    lineLabel.getStyleClass().add("label-focused");
+                } else if (event.getClickCount() == 2) {
+                    KeyEvent tabKeyEvent = new KeyEvent(KeyEvent.KEY_PRESSED,
+                            KeyCode.TAB.getChar(),
+                            KeyCode.TAB.getChar(),
+                            KeyCode.TAB,
+                            false,
+                            false,
+                            false,
+                            false
+                    );
+                    textArea.fireEvent(tabKeyEvent);
+                }
+            });
+            gridPane.add(lineLabel, 0, i);
         }
 
-        ScrollPane scrollPane = new ScrollPane();
-        scrollPane.setMaxWidth(300);
-        scrollPane.setMaxHeight(300);
-        scrollPane.setFitToWidth(true);
+        ScrollPane scrollPane = new ScrollPane(gridPane);
+        scrollPane.setMaxWidth(300); // Set the preferred width for the scrollable area
+        scrollPane.setMaxHeight(300); // Set the preferred height for the scrollable area
 
-        TextArea tooltipContent = new TextArea(tooltipText.toString());
-        tooltipContent.setEditable(false);
-        tooltipContent.setWrapText(true);
-        tooltipContent.setMaxWidth(300);
+        // Customize ScrollPane appearance
+        scrollPane.setStyle("-fx-background: black;"); // Make background transparent
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // Hide horizontal scrollbar
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
 
-        scrollPane.setContent(tooltipContent);
-
-        Tooltip tooltip = new Tooltip();
-        tooltip.setGraphic(scrollPane);
-        tooltip.setAutoHide(true);
-        return tooltip;
+        complitionTooltip.setGraphic(scrollPane);
 
     }
 
@@ -209,7 +401,7 @@ public class EditAreaUtility {
             if (ORANGE_KEY_WORDS.contains(line.substring(startIndex, endIndex))) {
                 colorThis(textArea, "FF9D00", new int[] { startIndex, endIndex });
             } else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
-                colorThis(textArea, "black", new int[] { startIndex, endIndex });
+                colorThis(textArea, "white", new int[] { startIndex, endIndex });
             }
         }
 
@@ -349,7 +541,7 @@ public class EditAreaUtility {
 
         for (int i = start; i < end; i++) {
             String currentStyle = textArea.getStyleOfChar(i);
-            textArea.setStyle(i, i + 1, currentStyle + " -fx-fill: red;");
+            textArea.setStyle(i + 1, i + 2, currentStyle + " -fx-fill: red;");
         }
 
         Tooltip tooltip = new Tooltip(diagnostic.getMessage());
@@ -366,9 +558,17 @@ public class EditAreaUtility {
             } else {
                 tooltip.hide();
             }
+            new Timeline(new KeyFrame(
+                    javafx.util.Duration.millis(4000),
+                    event2 -> tooltip.hide()
+            )).play();
         });
         textArea.addEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(mouseEvents.size() - 1));
 
     }
 
+    public static void setGoTo(Button goToBtn) {
+
+        EditAreaUtility.goToBtn = goToBtn;
+    }
 }

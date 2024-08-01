@@ -8,6 +8,7 @@ import com.project.javaeditor.Application;
 import com.project.utility.MainUtility;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
+import javafx.scene.control.Label;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -22,8 +23,9 @@ public class ProjectManager {
 
     private static final Logger logger = LogManager.getLogger(ProjectManager.class);
     private static ConsoleTextArea textArea;
+    private static Label projectName;
 
-    public static final File APP_HOME = new File(System.getProperty("user.home"), "NotAnIDE_Projects");
+    public static final File APP_HOME = new File(System.getProperty("user.home"), "FusionProjects");
     private static RootTreeNode currentProject;
     private static GradleWrapper gradleWrapper = null;
 
@@ -132,6 +134,7 @@ public class ProjectManager {
             }
         }
         if (isProject) {
+            projectName.setText(path.toFile().getName());
             currentProject = new RootTreeNode(path);
             gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), path.toFile(), textArea);
             JLSManager.changeWorkSpaceFolder(path.toUri().toString(), path.toFile().getName(), true);
@@ -166,5 +169,10 @@ public class ProjectManager {
     public static void setTextArea(ConsoleTextArea textArea) {
 
         ProjectManager.textArea = textArea;
+    }
+
+    public static void setProjectName(Label projectName) {
+
+        ProjectManager.projectName = projectName;
     }
 }

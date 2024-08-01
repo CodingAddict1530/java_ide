@@ -8,6 +8,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,13 +31,15 @@ public class ApplicationView {
 
     public void setUp(ApplicationModel applicationModel, Class<Application> application) {
 
+        stage.initStyle(StageStyle.UNDECORATED);
         try {
-            fxmlLoader = new FXMLLoader(application.getResource("editor.fxml"));
+            fxmlLoader = new FXMLLoader(application.getResource("fxml/editor.fxml"));
             Parent root = fxmlLoader.load();
             Scene scene = new Scene(root, 1000, 600);
-            scene.getStylesheets().add(Objects.requireNonNull(application.getResource("style.css")).toExternalForm());
+            scene.getStylesheets().add(Objects.requireNonNull(application.getResource("css/style.css")).toExternalForm());
             stage.setTitle("Fusion IDE");
             stage.setScene(scene);
+            stage.setMaximized(true);
             applicationModel.setUp(fxmlLoader);
         } catch (IOException e) {
             logger.error(e);

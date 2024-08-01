@@ -7,12 +7,14 @@ import javafx.stage.Stage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 
 public class Application extends javafx.application.Application {
 
     private static final Logger logger = LogManager.getLogger(Application.class);
     private static boolean isInitialized = false;
-    private static boolean keepChecking = true;
+    private static AtomicBoolean keepChecking =  new AtomicBoolean(false);
     private static ApplicationModel applicationModel;
     private static ApplicationView applicationView;
     private static Stage primaryStage;
@@ -33,7 +35,7 @@ public class Application extends javafx.application.Application {
 
         logger.info("Application setup complete");
         new Thread(()-> {
-            while (keepChecking) {
+            while (keepChecking.get()) {
                 checkIfIdleWatching();
                 try {
                     Thread.sleep(2000);
@@ -54,7 +56,7 @@ public class Application extends javafx.application.Application {
         }
 
         ProjectWatcher.stopWatching();
-        keepChecking = false;
+        keepChecking.set(false);
         applicationModel.stopServer();
         logger.info("Application cleanup complete");
 
