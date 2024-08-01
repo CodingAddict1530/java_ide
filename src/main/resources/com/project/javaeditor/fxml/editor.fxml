@@ -75,7 +75,7 @@
                <children>
                   <HBox prefHeight="100.0" prefWidth="6.0" />
                   <Label fx:id="filePath" text="Label" HBox.hgrow="ALWAYS" />
-                  <HBox alignment="CENTER_RIGHT" prefHeight="100.0" prefWidth="40.0" HBox.hgrow="ALWAYS">
+                  <HBox alignment="CENTER_RIGHT" minWidth="100.0" prefHeight="100.0" HBox.hgrow="ALWAYS">
                      <children>
                         <Label onMouseClicked="#openIcons8Link" text="Icons by Icons8" textFill="WHITE">
                            <font>
@@ -89,7 +89,7 @@
                   </HBox>
                </children>
             </HBox>
-            <HBox fx:id="footerRight" alignment="CENTER" minWidth="200.0" prefHeight="100.0" prefWidth="200.0" HBox.hgrow="ALWAYS" />
+            <HBox fx:id="footerRight" alignment="CENTER" minWidth="100.0" prefHeight="100.0" HBox.hgrow="ALWAYS" />
          </children></HBox>
    </children>
 </VBox>

@@ -31,6 +31,7 @@ public class MainUtility {
 
     // 1 Failed to write
     // 2 Failed to make readonly
+    // 3 Nothing to write
     public static int writeOpenData(Path path, boolean readOnly) {
 
         File file = path.toFile();
@@ -38,11 +39,17 @@ public class MainUtility {
             logger.info("File {} already exists, or not writable", file.getPath());
             return 1;
         }
+        if (openProjectPath.isEmpty()) {
+            logger.info("No open files found");
+            return 3;
+        }
 
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(openProjectPath.get(0).toString()).append("\n");
-        for (OpenFile o : OpenFilesTracker.getOpenFiles()) {
-            stringBuilder.append(o.getFile().getPath()).append("\n");
+        if (!OpenFilesTracker.getOpenFiles().isEmpty()) {
+            for (OpenFile o : OpenFilesTracker.getOpenFiles()) {
+                stringBuilder.append(o.getFile().getPath()).append("\n");
+            }
         }
         stringBuilder.deleteCharAt(stringBuilder.length() - 1);
         boolean result = FileManager.writeToFile(path, stringBuilder.toString(), true, false);

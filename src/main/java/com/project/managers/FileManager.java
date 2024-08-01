@@ -197,6 +197,9 @@ public class FileManager {
     public static void newJavaFile(Path path, String extraKeyWord) {
 
         if (path == null) {
+            if (ProjectManager.getCurrentProject() == null) {
+                return;
+            }
             path = new File(ProjectManager.getCurrentProject().getPath().toString(), "src\\main\\java").toPath();
         }
         String[] splitName = path.toString().split("\\\\");

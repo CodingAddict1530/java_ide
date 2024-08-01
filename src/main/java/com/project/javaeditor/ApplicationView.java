@@ -29,7 +29,7 @@ public class ApplicationView {
 
     }
 
-    public void setUp(ApplicationModel applicationModel, Class<Application> application) {
+    public Controller setUp(ApplicationModel applicationModel, Class<Application> application) {
 
         stage.initStyle(StageStyle.UNDECORATED);
         try {
@@ -41,8 +41,10 @@ public class ApplicationView {
             stage.setScene(scene);
             stage.setMaximized(true);
             applicationModel.setUp(fxmlLoader);
+            return fxmlLoader.getController();
         } catch (IOException e) {
             logger.error(e);
+            return null;
         }
 
     }

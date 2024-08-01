@@ -1,7 +1,5 @@
 package com.project.javaeditor;
 
-import com.project.custom_classes.OpenFile;
-import com.project.custom_classes.OpenFilesTracker;
 import com.project.managers.JLSManager;
 import com.project.utility.MainUtility;
 import javafx.fxml.FXMLLoader;
@@ -34,7 +32,7 @@ public class ApplicationModel {
 
     public void setUp(FXMLLoader fxmlLoader) {
 
-        ArrayList<Path> previousContent = MainUtility.readOpenData(Paths.get("src/main/files/records.dat"));
+        ArrayList<Path> previousContent = MainUtility.readOpenData(Paths.get("src/main/files/records.fus"));
         Controller controller = fxmlLoader.getController();
         controller.addPreviousContent(previousContent);
         if (MainUtility.checkAndFix()) {
@@ -47,7 +45,7 @@ public class ApplicationModel {
 
     public void save() {
 
-        switch (MainUtility.writeOpenData(Paths.get("src/main/files/records.dat"), true)) {
+        switch (MainUtility.writeOpenData(Paths.get("src/main/files/records.fus"), true)) {
             case 0:
                 logger.info("Successfully wrote to records.dat");
                 break;

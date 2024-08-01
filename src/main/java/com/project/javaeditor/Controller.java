@@ -383,23 +383,25 @@ public class Controller implements Initializable {
                     if (tabPane.getSelectionModel().getSelectedItem() != null) {
                         String path = OpenFilesTracker.getOpenFile(tabPane.getSelectionModel().getSelectedItem()).getFile().getPath();
                         String[] parts = path.split("\\\\");
-                        boolean start = false;
                         StringBuilder sb = new StringBuilder();
-                        for (String part : parts) {
-                            if (start || part.equals("FusionProjects")) {
-                                start = true;
-                                sb.append(part).append("  >  ");
+                        for (int i = parts.length - 1; i >= 0; i--) {
+                            if (!parts[i].equals("FusionProjects")) {
+                                sb.append(parts[i]).append("  <  ");
+                            } else {
+                                break;
                             }
                         }
                         if (filePath.getText().isEmpty()) {
-                            for (String part : parts) {
-                                sb.append(part).append("  >  ");
+                            for (int i = parts.length - 1; i >= 0; i--) {
+                                sb.append(parts[i]).append("  <  ");
                             }
                         }
                         for (int i = 0; i < 5; i++) {
                             sb.deleteCharAt(sb.length() - 1);
                         }
-                        filePath.setText(sb.toString());
+                        Platform.runLater(() -> filePath.setText(sb.toString()));
+                    } else {
+                        Platform.runLater(() -> filePath.setText(ProjectManager.APP_HOME.toPath().toFile().getName()));
                     }
                     Thread.sleep(2000);
                 } catch (Exception e) {
@@ -408,7 +410,15 @@ public class Controller implements Initializable {
             }
 
         });
+        filePathThread.start();
 
+    }
+
+    public void stopFilePathThread() {
+
+        if (filePathThread != null) {
+            keepRunning.set(false);
+        }
     }
 
     private void setUpHeader() {

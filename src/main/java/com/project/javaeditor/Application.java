@@ -18,6 +18,7 @@ public class Application extends javafx.application.Application {
     private static ApplicationModel applicationModel;
     private static ApplicationView applicationView;
     private static Stage primaryStage;
+    private static Controller controller;
 
     @Override
     public void start(Stage stage) {
@@ -28,7 +29,10 @@ public class Application extends javafx.application.Application {
         applicationView = new ApplicationView(stage);
         applicationModel.startServer();
         JLSManager.initializeServer();
-        applicationView.setUp(applicationModel, Application.class);
+        controller = applicationView.setUp(applicationModel, Application.class);
+        if (controller == null) {
+            throw new RuntimeException("Controller is null");
+        }
         stage.show();
         isInitialized = true;
         stage.setOnCloseRequest(event -> applicationView.checkForUnsavedFiles());
@@ -55,6 +59,7 @@ public class Application extends javafx.application.Application {
             applicationModel.save();
         }
 
+        controller.stopFilePathThread();
         ProjectWatcher.stopWatching();
         keepChecking.set(false);
         applicationModel.stopServer();
