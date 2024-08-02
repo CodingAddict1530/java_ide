@@ -1,0 +1,99 @@
+Java Editor (Fusion IDE)
+Copyright 2024 Alexis Mugisha
+
+This product includes software developed by Alexis Mugisha (https://github.com/CodingAddict1530).
+
+
+This product includes code from the following projects:
+
+- Apache Log4j API: Licensed under the Apache License, Version 2.0
+    Copyright 1999-2024 The Apache Software Foundation
+    - License:
+        Please refer to: http://www.apache.org/licenses/
+    - Notice:
+        Apache Log4j API
+        Copyright 1999-2024 The Apache Software Foundation
+
+        This product includes software developed at
+        The Apache Software Foundation (http://www.apache.org/).
+
+- Apache Log4j Core: Licensed under the Apache License, Version 2.0
+    Copyright 1999-2012 Apache Software Foundation
+    - License:
+            Please refer to: http://www.apache.org/licenses/
+    - Notice:
+        Apache Log4j Core
+        Copyright 1999-2012 Apache Software Foundation
+
+        This product includes software developed at
+        The Apache Software Foundation (http://www.apache.org/).
+
+        ResolverUtil.java
+        Copyright 2005-2006 Tim Fennell
+
+- ApiGuardian: Licensed under the Apache License, Version 2.0
+
+- ControlsFX: Licensed under the BSD 3-Clause License
+    Copyright (c) 2013, ControlsFX
+    - License:
+        Please refer to: https://github.com/controlsfx/controlsfx/blob/master/license.txt
+
+- FXMisc Flowless: Licensed under the BSD 2-Clause "Simplified" License
+    Copyright (c) 2014, TomasMikula
+    - License:
+        Please refer to: https://github.com/FXMisc/Flowless/blob/master/LICENSE
+
+- FXMisc RichTextFX: Licensed under the BSD 2-Clause "Simplified" License
+    Copyright (c) 2013-2023, Tomas Mikula and contributors
+    - License:
+        Please refer to: https://github.com/FXMisc/RichTextFX/blob/master/LICENSE
+
+- FXMisc UndoFX: Licensed under the BSD 2-Clause "Simplified" License
+    Copyright (c) 2014, TomasMikula
+    - License:
+        Please refer to: https://github.com/FXMisc/UndoFX/blob/master/LICENSE
+
+- FXMisc WellBehavedFX: Licensed under the BSD 2-Clause "Simplified" License
+    Copyright (c) 2014, TomasMikula
+    - License:
+        Please refer to: https://github.com/FXMisc/WellBehavedFX/blob/master/LICENSE
+
+- JavaFX: Licensed under the GNU General Public License v2.0 with Classpath Exception
+    Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+    - License:
+        Please refer to: https://github.com/openjdk/jfx/blob/master/LICENSE
+
+- ReactFX:  Licensed under the BSD 2-Clause "Simplified" License
+    Copyright (c) 2013-2014, Tomas Mikula
+    - License:
+        Please refer to: https://github.com/TomasMikula/ReactFX/blob/master/LICENSE
+
+- Eclipse JDT Language Server: Licensed under the Eclipse Public License - v 2.0
+    - License:
+        Please refer to: https://github.com/eclipse-jdtls/eclipse.jdt.ls/blob/master/LICENSE
+- Gradle:  Licensed under the Apache License, Version 2.0
+    - License:
+        Please refer to: http://www.apache.org/licenses/
+    - Notice:
+        =========================================================================
+        ==  NOTICE file corresponding to the section 4 d of                    ==
+        ==  the Apache License, Version 2.0,                                   ==
+        ==  in this case for the Gradle distribution.                          ==
+        =========================================================================
+
+        This product includes software developed by
+        The Apache Software Foundation (http://www.apache.org/).
+
+        It includes the following other software:
+
+        Groovy (http://groovy-lang.org)
+        SLF4J (http://www.slf4j.org)
+        JUnit (http://www.junit.org)
+        JCIFS (http://jcifs.samba.org)
+        HttpClient (https://hc.apache.org/httpcomponents-client-4.5.x/)
+
+        For licenses, see the LICENSE file.
+
+        If any software distributed with Gradle does not have an Apache 2 License, its license is explicitly listed in the
+        LICENSE file.
