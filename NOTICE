@@ -72,6 +72,11 @@ This product includes code from the following projects:
 - Eclipse JDT Language Server: Licensed under the Eclipse Public License - v 2.0
     - License:
         Please refer to: https://github.com/eclipse-jdtls/eclipse.jdt.ls/blob/master/LICENSE
+
+- Diff Match Patch: Licensed under the Apache License, Version 2.0
+    - License:
+        Please refer to: http://www.apache.org/licenses/
+
 - Gradle:  Licensed under the Apache License, Version 2.0
     - License:
         Please refer to: http://www.apache.org/licenses/
