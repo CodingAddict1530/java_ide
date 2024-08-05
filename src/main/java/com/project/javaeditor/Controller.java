@@ -1,12 +1,35 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.javaeditor;
 
-import com.project.custom_classes.*;
+import com.project.custom_classes.SettingsResult;
+import com.project.custom_classes.ConsoleTextArea;
+import com.project.custom_classes.OpenFilesTracker;
+import com.project.custom_classes.CustomFile;
+import com.project.custom_classes.CustomTextArea;
 import com.project.gradle.GradleWrapper;
 import com.project.java_code_processing.JavaCodeExecutor;
-import com.project.managers.*;
-import com.project.utility.EditAreaUtility;
+import com.project.managers.DirectoryManager;
+import com.project.managers.FileManager;
+import com.project.managers.ProjectManager;
+import com.project.managers.TextManager;
+import com.project.managers.EditAreaManager;
 import com.project.utility.MainUtility;
-import com.project.utility.ProjectWatcher;
 import com.project.utility.SettingsUtility;
 import javafx.application.Platform;
 import javafx.event.EventHandler;
@@ -14,7 +37,9 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.*;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tab;
 import javafx.scene.control.Button;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -22,9 +47,11 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.*;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.HBox;
-
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
@@ -33,94 +60,241 @@ import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.awt.*;
+import java.awt.Desktop;
 import java.io.File;
 import java.net.URI;
 import java.net.URL;
-import java.nio.file.*;
-import java.util.*;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.ResourceBundle;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.project.utility.EditAreaUtility.addAccelerator;
+import static com.project.managers.EditAreaManager.addAccelerator;
 
+/**
+ * The controller of the main Scene.
+ */
 public class Controller implements Initializable {
 
+    /**
+     * TabPane containing edit areas.
+     */
     @FXML
     private TabPane tabPane;
+
+    /**
+     * Creates new file.
+     */
     @FXML
     private MenuItem newFile;
+
+    /**
+     * Opens a file.
+     */
     @FXML
     private MenuItem openFile;
+
+    /**
+     * Saves current file.
+     */
     @FXML
     private MenuItem saveFile;
+
+    /**
+     * Closes current file.
+     */
     @FXML
     private MenuItem closeFile;
+
+    /**
+     * Cuts selected text or item.
+     */
     @FXML
     private MenuItem cut;
+
+    /**
+     * Copies selected text or item.
+     */
     @FXML
     private MenuItem copy;
+
+    /**
+     * Paste copied text or item.
+     */
     @FXML
     private MenuItem paste;
+
+    /**
+     * Undoes an action in the code area.
+     */
     @FXML
     private MenuItem undo;
+
+    /**
+     * Redoes an action in the code area.
+     */
     @FXML
     private MenuItem redo;
+
+    /**
+     * Creates a new project.
+     */
     @FXML
     private MenuItem newProject;
+
+    /**
+     * Opens a new project.
+     */
     @FXML
     private MenuItem openProject;
+
+    /**
+     * Deletes the current project.
+     */
     @FXML
     private MenuItem deleteProject;
+
+    /**
+     * Contains the tree view of the current project.
+     */
     @FXML
     private VBox projectView;
+
+    /**
+     * Contains the projectView and the TabPane.
+     */
     @FXML
     private SplitPane splitPane;
+
+    /**
+     * Contains the splitPane and the console.
+     */
     @FXML
     private SplitPane verticalSplitPane;
+
+    /**
+     * The footer of the application.
+     */
     @FXML
     private HBox footer;
+
+    /**
+     * Contains the ConsoleTextArea.
+     */
     @FXML
     private HBox console;
+
+    /**
+     * Contains the menu options.
+     */
     @FXML
     private MenuBar menuBar;
+
+    /**
+     * The part of the title bar with other buttons except close, minimize and maximize.
+     */
     @FXML
     private HBox titleBarOptions;
+
+    /**
+     * The part of the title bar with close, minimize and maximize buttons.
+     */
     @FXML
     private HBox titleBarButtons;
+
+    /**
+     * HBox used to create padding.
+     */
     @FXML
     private HBox padHBox;
+
+    /**
+     * Displays the current project.
+     */
     @FXML
     private Label projectName;
+
+    /**
+     * Contains the buttons related to running a program.
+     */
     @FXML
     private HBox runOptions;
+
+    /**
+     * Contains the buttons related to settings.
+     */
     @FXML
     private HBox settingsOptions;
+
+    /**
+     * Displays the path to the current file being edited.
+     */
     @FXML
     private Label filePath;
 
+    /**
+     * The logger for the class.
+     */
     private static final Logger logger = LogManager.getLogger(Controller.class);
 
+    /**
+     * A FileChooser Object to select files from device.
+     */
     private static final FileChooser fileChooser = new FileChooser();
+
+    /**
+     * A DirectoryChooser Object to select directories from device.
+     */
     private static final DirectoryChooser directoryChooser = new DirectoryChooser();
+
+    /**
+     * ArrayList containing the path of the currently open project.
+     */
     private static final ArrayList<Path> openProjectPath = new ArrayList<>();
+
+    /**
+     * The system clipboard for copy, cut, and paste operations.
+     */
     private static final Clipboard clipboard = Clipboard.getSystemClipboard();
+
+    /**
+     * Determines whether an action is a cut or copy.
+     */
     private static final ArrayList<Boolean> shouldCut = new ArrayList<>();
+
+    /**
+     * Thread that checks what the current file being edited is and updates the filePath Label.
+     */
     private static Thread filePathThread = null;
+
+    /**
+     * Contains the result from the settings Dialog.
+     */
     private static SettingsResult settingsResult;
+
+    /**
+     * Determines whether filePathThread should keep running.
+     */
     private static final AtomicReference<Boolean> keepRunning = new AtomicReference<>(false);
 
+    /**
+     * Initializes the scene.
+     *
+     * @param url The URL.
+     * @param rb The ResourceBundle.
+     */
     @FXML
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
+        // Setups
         setUpHeader();
         setUpFooter();
-
         setUpConsole();
         initializeManagers();
-        logger.info("Manager shared attributes set!");
 
+        // Add accelerators to menu items.
         addAccelerator(newFile, KeyCode.N);
         addAccelerator(openFile, KeyCode.O);
         addAccelerator(saveFile, KeyCode.S);
@@ -136,9 +310,7 @@ public class Controller implements Initializable {
         logger.info("Accelerators added");
 
         footer.setAlignment(Pos.CENTER);
-
         projectView.getStyleClass().add("tab-pane");
-
         splitPane.setDividerPositions(0.3);
         verticalSplitPane.getStyleClass().add("vertical-split-pane");
         verticalSplitPane.setDividerPositions(1);
@@ -147,30 +319,46 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Creates a new file under src/main/java.
+     * Does nothing if there is no current project.
+     */
     @FXML
     public void newFile() {
 
         FileManager.newJavaClass(null);
     }
 
+    /**
+     * Closes the current file.
+     */
     @FXML
     public void closeFile() {
 
         FileManager.closeFile(null);
     }
 
+    /**
+     * Saves the current file.
+     */
     @FXML
     public void saveFile() {
 
         FileManager.saveFile(null);
     }
 
+    /**
+     * Opens a file.
+     */
     @FXML
     public void openFile() {
 
         FileManager.openFile(null);
     }
 
+    /**
+     * Creates a new project.
+     */
     @FXML
     public void newProject() {
 
@@ -184,6 +372,9 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Opens a project.
+     */
     @FXML
     public void openProject() {
 
@@ -191,42 +382,63 @@ public class Controller implements Initializable {
         ProjectManager.openProject(null);
     }
 
+    /**
+     * Deletes a project.
+     */
     @FXML
     public void deleteProject() {
 
         ProjectManager.deleteProject();
     }
 
+    /**
+     * Copies the selected item or text.
+     */
     @FXML
     public void copy() {
 
         TextManager.copy();
     }
 
+    /**
+     * Cuts the selected item or text.
+     */
     @FXML
     public void cut() {
 
         TextManager.cut();
     }
 
+    /**
+     * Pastes the item or text in the clipboard.
+     */
     @FXML
     public void paste() {
 
         TextManager.paste();
     }
 
+    /**
+     * Undoes an action in the textArea.
+     */
     @FXML
     public void undo() {
 
-        EditAreaUtility.undo((CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent(), true);
+        EditAreaManager.undoOrRedo((CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent(), true);
     }
 
+    /**
+     * Redoes an action in the textArea.
+     */
     @FXML
     public void redo() {
 
-        EditAreaUtility.undo((CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent(), false);
+        EditAreaManager.undoOrRedo((CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent(), false);
     }
 
+    /**
+     * Opens a link to Icons8 in a browser.
+     */
     @FXML
     public void openIcons8Link() {
 
@@ -240,6 +452,11 @@ public class Controller implements Initializable {
         }
     }
 
+    /**
+     * Opens previous project and files.
+     *
+     * @param paths An array with the Paths.
+     */
     public void addPreviousContent(ArrayList<Path> paths) {
 
         try {
@@ -254,7 +471,6 @@ public class Controller implements Initializable {
                 logger.info("Previous content added");
             } else {
                 logger.info("No previous content");
-                FileManager.newFile(null, null, true);
             }
         } catch (Exception e) {
             logger.error(e);
@@ -262,10 +478,15 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Sets up the console.
+     */
     public void setUpConsole() {
 
         ConsoleTextArea textArea = new ConsoleTextArea();
         textArea.getStyleClass().add("inline-css-text-area-console");
+
+        // Style user input with color green.
         textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
             int caretPos = textArea.getCaretPosition();
@@ -291,6 +512,9 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Shows a Dialog for settings.
+     */
     public void showSettings() {
 
         String javaPath = SettingsUtility.getJavaPath();
@@ -302,30 +526,48 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Runs a file or the app.
+     */
     public void run() {
 
+        // Display the Console.
         verticalSplitPane.setDividerPositions(0.7);
         verticalSplitPane.getStyleClass().remove("vertical-split-pane");
         console.setMaxHeight(HBox.USE_COMPUTED_SIZE);
+
+        // Get current tab.
         Tab tab = tabPane.getSelectionModel().getSelectedItem();
         if (tab == null) {
             return;
         }
         if (Boolean.FALSE.equals(OpenFilesTracker.isSaved(tab))) {
+
+            // Save the file if it is not.
             saveFile();
         }
+
+        // Get the file.
         CustomFile file = OpenFilesTracker.getOpenFile(tab).getFile();
+
+        // Unprotect the ConsoleTextArea to add text to it, then re-protect it.
         ConsoleTextArea consoleTextArea = (ConsoleTextArea) console.getChildren().get(0);
         consoleTextArea.setEditable(true);
         consoleTextArea.unprotectText();
         consoleTextArea.replaceText("");
         consoleTextArea.protectText();
+
+        // Check if file is part of the current project.
         if (file.toPath().startsWith(ProjectManager.getCurrentProject().getPath())) {
+
+            // If so use gradle.
             GradleWrapper gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile()
                     , consoleTextArea);
             gradleWrapper.runBuild();
             gradleWrapper.run(file.getPackageName());
         } else {
+
+            // Otherwise use the JavaCodeExecutor.
             switch (JavaCodeExecutor.run(file, null)) {
                 case 1:
                     logger.info("Couldn't read {} to execute", file.getPath());
@@ -341,6 +583,9 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Initialize managers with all the necessary fields.
+     */
     public void initializeManagers() {
 
         FileManager.setFileChooser(fileChooser);
@@ -358,7 +603,7 @@ public class Controller implements Initializable {
         TextManager.setTabPane(tabPane);
         TextManager.setClipboard(clipboard);
 
-        ProjectManager.setTextArea((ConsoleTextArea) console.getChildren().get(0));
+        ProjectManager.setConsoleTextArea((ConsoleTextArea) console.getChildren().get(0));
         ProjectManager.setProjectName(projectName);
 
         SettingsUtility.setDirectoryChooser(directoryChooser);
@@ -370,8 +615,12 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Starts checking and updating filePath.
+     */
     public void startFilePathThread() {
 
+        // If already running, restart it.
         if (filePathThread != null) {
             keepRunning.set(false);
         }
@@ -399,10 +648,16 @@ public class Controller implements Initializable {
                         for (int i = 0; i < 5; i++) {
                             sb.deleteCharAt(sb.length() - 1);
                         }
+
+                        // Use Javafx Thread for UI updates.
                         Platform.runLater(() -> filePath.setText(sb.toString()));
                     } else {
+
+                        // Use Javafx Thread for UI updates.
                         Platform.runLater(() -> filePath.setText(ProjectManager.APP_HOME.toPath().toFile().getName()));
                     }
+
+                    // Wait 2 seconds before checking again.
                     Thread.sleep(2000);
                 } catch (Exception e) {
                     logger.error(e);
@@ -414,6 +669,9 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Stops the filePathThread.
+     */
     public void stopFilePathThread() {
 
         if (filePathThread != null) {
@@ -421,8 +679,12 @@ public class Controller implements Initializable {
         }
     }
 
+    /**
+     * Sets up the header of the application.
+     */
     private void setUpHeader() {
 
+        // Use JavaFX Thread to ensure Node being accessed have been initialized.
         Platform.runLater(() -> {
             Stage stage = (Stage) tabPane.getScene().getWindow();
 
@@ -524,8 +786,12 @@ public class Controller implements Initializable {
 
     }
 
+    /**
+     * Sets up the footer of the application.
+     */
     private void setUpFooter() {
 
+        // Use JavaFX Thread to ensure Node being accessed have been initialized.
         Platform.runLater(() -> {
             footer.getStyleClass().add("menu-bar");
             filePath.setStyle("-fx-text-fill: #f0f0f0;-fx-font-size: 15px;");
@@ -545,11 +811,17 @@ public class Controller implements Initializable {
             MainUtility.sizeImage(padlockIcon, 15, 15);
             readOnlyToggleBtn.setGraphic(padlockIcon);
             footer.getChildren().addAll(goToBtn, lineSeparatorBtn, charEncodingBtn, indentSpaceBtn, readOnlyToggleBtn);
-            EditAreaUtility.setGoTo(goToBtn);
+            EditAreaManager.setGoTo(goToBtn);
         });
 
     }
 
+    /**
+     * Enable the header to be used to drag the window.
+     *
+     * @param node A particular Node that is part of the header.
+     * @param stage The primary stage.
+     */
     private void setUpTopBar(Node node, Stage stage) {
 
         AtomicReference<Double> xOffset = new AtomicReference<>();

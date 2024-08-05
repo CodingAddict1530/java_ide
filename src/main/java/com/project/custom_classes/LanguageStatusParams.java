@@ -1,4 +1,4 @@
-package com.project.utility;
+package com.project.custom_classes;
 
 public class LanguageStatusParams {
 

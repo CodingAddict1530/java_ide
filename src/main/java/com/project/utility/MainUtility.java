@@ -1,12 +1,30 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.utility;
 
-import com.project.custom_classes.CustomFile;
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
 import com.project.managers.ProjectManager;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
-import javafx.scene.control.*;
+import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import com.project.managers.FileManager;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -15,30 +33,48 @@ import javafx.stage.StageStyle;
 import javafx.util.Duration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.*;
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Main utility class for the application.
+ */
 public class MainUtility {
 
+    /**
+     * The logger for the class.
+     */
     private static final Logger logger = LogManager.getLogger(MainUtility.class);
 
+    /**
+     * An ArrayList containing the Path to the open project.
+     */
     private static ArrayList<Path> openProjectPath;
 
     // 1 Failed to write
     // 2 Failed to make readonly
     // 3 Nothing to write
+
+    /**
+     * Writes the open content to a file for storage.
+     *
+     * @param path The Path to the file to write to.
+     * @param readOnly Whether to set it read only or not.
+     * @return 1 if it can't write to the file, 2 if it can't make the file read only, 3 if there is no data to write.
+     */
     public static int writeOpenData(Path path, boolean readOnly) {
 
         File file = path.toFile();
         if (file.exists() && !file.setWritable(true)) {
-            logger.info("File {} already exists, or not writable", file.getPath());
+            logger.info("File {} not writable", file.getPath());
             return 1;
         }
+
+        // Check if there is an open project.
         if (openProjectPath.isEmpty()) {
             logger.info("No open files found");
             return 3;
@@ -51,6 +87,8 @@ public class MainUtility {
                 stringBuilder.append(o.getFile().getPath()).append("\n");
             }
         }
+
+        // Remove redundant '\n'.
         stringBuilder.deleteCharAt(stringBuilder.length() - 1);
         boolean result = FileManager.writeToFile(path, stringBuilder.toString(), true, false);
         if (result) {
@@ -69,13 +107,22 @@ public class MainUtility {
 
     }
 
+    /**
+     * Reads data store in the storage file.
+     *
+     * @param path The Path to the file to read.
+     * @return An ArrayList of the Paths read from the file.
+     */
     public static ArrayList<Path> readOpenData(Path path) {
 
+        // Read the file.
         ArrayList<String> lines = FileManager.readFile(path);
         ArrayList<Path> returnValue = new ArrayList<>();
         boolean valid = true;
         if (lines != null) {
             for (String s : lines) {
+
+                // Check if that file exists.
                 if (new File(s).exists()) {
                     returnValue.add(Paths.get(s));
                 } else {
@@ -90,6 +137,11 @@ public class MainUtility {
 
     }
 
+    /**
+     * Checks the project home directory and creates it if it is missing.
+     *
+     * @return Whether all went well.
+     */
     public static boolean checkAndFix() {
 
         File appHome = ProjectManager.APP_HOME;
@@ -107,6 +159,13 @@ public class MainUtility {
 
     }
 
+    /**
+     * Displays a basic Dialog that prompts user for an input.
+     *
+     * @param title The title of the dialog.
+     * @param text The content of the dialog (Prompt text).
+     * @return The user input.
+     */
     public static String quickDialog(String title, String text) {
 
         final String[] output = new String[1];
@@ -120,23 +179,42 @@ public class MainUtility {
 
     }
 
+    /**
+     * Displays a confirmation dialog.
+     *
+     * @param title The title of the dialog.
+     * @param text The content of the dialog.
+     * @return Whether the user confirmed or not.
+     */
     public static boolean confirm(String title, String text) {
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(text);
+
+        // Use a danger image.
         ImageView confirmImage =new ImageView(new Image(Objects.requireNonNull(MainUtility.class.getResourceAsStream("icons/warning.png"))));
         sizeImage(confirmImage, 50, 50);
         alert.setGraphic(confirmImage);
+
+        // Remove default styles
         alert.initStyle(StageStyle.UNDECORATED);
+
+        // Add custom style.
         alert.getDialogPane().getStylesheets().add(Objects.requireNonNull(MainUtility.class.getResource("css/alert-style.css")).toExternalForm());
         Optional<ButtonType> result = alert.showAndWait();
+
         return (result.isPresent() && result.get() == ButtonType.OK);
 
     }
 
-    public static void fadeStage(Stage stage) {
+    /**
+     * Create a fade out animation.
+     *
+     * @param stage The primary stage.
+     */
+    public static void fadeOutStage(Stage stage) {
 
         FadeTransition fadeOut = new FadeTransition(Duration.millis(1000), stage.getScene().getRoot());
         fadeOut.setFromValue(stage.getScene().getRoot().getOpacity());
@@ -157,6 +235,11 @@ public class MainUtility {
 
     }
 
+    /**
+     * Create a fade in animation.
+     *
+     * @param stage The primary stage.
+     */
     public static void fadeInStage(Stage stage) {
 
         FadeTransition fadeIn = new FadeTransition(Duration.millis(1000), stage.getScene().getRoot());
@@ -176,6 +259,13 @@ public class MainUtility {
 
     }
 
+    /**
+     * Sizes an ImageView.
+     *
+     * @param image The ImageView.
+     * @param width The width.
+     * @param height The height.
+     */
     public static void sizeImage(ImageView image, int width, int height) {
 
         image.setFitWidth(width);
@@ -185,6 +275,11 @@ public class MainUtility {
 
     }
 
+    /**
+     * Sets up opeProjectPath.
+     *
+     * @param openProjectPath openProjectPath.
+     */
     public static void setOpenProjectPath(ArrayList<Path> openProjectPath) {
 
         MainUtility.openProjectPath = openProjectPath;

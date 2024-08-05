@@ -1,6 +1,23 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.custom_classes;
 
-import com.project.utility.EditAreaUtility;
+import com.project.managers.EditAreaManager;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.input.KeyCode;
@@ -9,37 +26,74 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.GridPane;
 import org.fxmisc.richtext.InlineCssTextArea;
-
 import java.util.LinkedList;
 import java.util.Objects;
-import java.util.Stack;
 
+/**
+ * A custom InlineCssTextArea to use as the coding area.
+ */
 public class CustomTextArea extends InlineCssTextArea {
 
+    /**
+     * Maximum number of redo and undo entries each.
+     */
     private static final int MAX_UNDO_REDO_ENTRIES = 1000;
+
+    /**
+     * An inner InlineCssTextArea to hold the actual contents of the TextArea.
+     * This allows the outer TextArea to be modified for user interaction while preserving actual text.
+     */
     private final InlineCssTextArea innerTextArea = new InlineCssTextArea();
+
+    /**
+     * Number of time caret has to be moved.
+     */
     private int moveCaret = 0;
+
+    /**
+     * A Stack (implemented as LinkedList) for undo operations.
+     */
     private final LinkedList<TextAreaChange> undoStack = new LinkedList<>();
+
+    /**
+     * A Stack (implemented as LinkedList) for redo operations.
+     */
     private final LinkedList<TextAreaChange> redoStack = new LinkedList<>();
 
+    /**
+     * Instantiates a CustomTextArea object.
+     *
+     * @param isColored whether the TextArea will be formatted.
+     */
     public CustomTextArea(Boolean isColored) {
 
         super();
 
+        // Filters for certain key presses and acts before they modify anything.
         this.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
 
             int caretPosition = this.getCaretPosition();
             switch (event.getCode()) {
+
                 case TAB:
+
+                    // Prevent event from propagating any further.
                     event.consume();
-                    if (EditAreaUtility.complitionTooltip.isShowing()) {
-                        if (EditAreaUtility.completionTooltipCurrentFocus < 0) {
-                            EditAreaUtility.completionTooltipCurrentFocus = 0;
+
+                    // If Tooltip is showing, tab will autocomplete.
+                    if (EditAreaManager.complitionTooltip.isShowing()) {
+
+                        // If value is less than 0, the user hasn't selected an option.
+                        // Default is the first.
+                        if (EditAreaManager.completionTooltipCurrentFocus < 0) {
+                            EditAreaManager.completionTooltipCurrentFocus = 0;
                         }
-                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent());
+                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent());
                         Label label = ((Label) gp.getChildren().get(
-                                EditAreaUtility.completionTooltipCurrentFocus
+                                EditAreaManager.completionTooltipCurrentFocus
                         ));
+
+                        // Delete any characters user had typed related to the word to autocomplete.
                         for (int i = this.getCaretPosition() - 1; i >= 0; i--) {
                             if (Character.isLetterOrDigit(this.getText().charAt(i))) {
                                 this.replaceText(i, i + 1, "");
@@ -47,15 +101,25 @@ public class CustomTextArea extends InlineCssTextArea {
                                 break;
                             }
                         }
+
+                        // Add the word.
                         this.replaceText(this.getCaretPosition(), this.getCaretPosition(), label.getText().split(" ")[0]);
-                        EditAreaUtility.complitionTooltip.hide();
+
+                        // Hide the Tooltip.
+                        EditAreaManager.complitionTooltip.hide();
                         break;
                     }
+
+                    // Here, tab will represent 4 spaces.
                     this.replaceText(caretPosition, caretPosition, "    ");
                     this.moveTo(caretPosition + 4);
                     break;
+
                 case BACK_SPACE:
                     String text = this.getText();
+
+                    // Check whether an opening bracket or quotation is being deleted.
+                    // Delete adjacent closing bracket is there is any.
                     char caretLeft = caretPosition > 0 ? text.charAt(caretPosition - 1) : '\u0000';
                     char caretRight = caretPosition < text.length() ? text.charAt(caretPosition) : '\u0000';
                     if ((caretLeft == '(' && caretRight == ')') || (caretLeft == '{' && caretRight == '}') ||
@@ -64,142 +128,242 @@ public class CustomTextArea extends InlineCssTextArea {
                         this.replaceText(caretPosition, caretPosition + 1, "");
                     }
                     break;
+
                 case DOWN:
-                    if (EditAreaUtility.complitionTooltip.isShowing()) {
+
+                    // If Tooltip is showing, down arrow will navigate the Tooltip.
+                    if (EditAreaManager.complitionTooltip.isShowing()) {
+
+                        // Prevent event from propagating any further.
                         event.consume();
-                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent());
-                        if (EditAreaUtility.completionTooltipCurrentFocus >= gp.getChildren().size() - 1) {
-                            EditAreaUtility.completionTooltipCurrentFocus = -1;
-                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(0);
+
+                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent());
+                        if (EditAreaManager.completionTooltipCurrentFocus >= gp.getChildren().size() - 1) {
+                            EditAreaManager.completionTooltipCurrentFocus = -1;
+                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(0);
                         }
+
+                        // Add "label-focused" style class to the current Label being focused.
+                        // This styles it to show it is focused.
                         gp.getChildren().get(
-                                (EditAreaUtility.completionTooltipCurrentFocus < 0) ?
-                                        gp.getChildren().size() - 1 : EditAreaUtility.completionTooltipCurrentFocus
+                                (EditAreaManager.completionTooltipCurrentFocus < 0) ?
+                                        gp.getChildren().size() - 1 : EditAreaManager.completionTooltipCurrentFocus
                         ).getStyleClass().remove("label-focused");
+
+                        // Remove the style from the previous Label.
                         gp.getChildren().get(
-                                ++EditAreaUtility.completionTooltipCurrentFocus
+                                ++EditAreaManager.completionTooltipCurrentFocus
                         ).getStyleClass().add("label-focused");
-                        if (EditAreaUtility.completionTooltipCurrentFocus % 10 == 0 && EditAreaUtility.completionTooltipCurrentFocus != 0) {
+
+                        // Scroll the Tooltip if needed.
+                        if (EditAreaManager.completionTooltipCurrentFocus % 10 == 0 && EditAreaManager.completionTooltipCurrentFocus != 0) {
                             double scrollAmount = 1.0 / ((gp.getChildren().size() % 10 != 0) ?
                                     (gp.getChildren().size() / 10) + 1 :
                                     (gp.getChildren().size() / 10));
-                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(
-                                    (((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() + scrollAmount > 1) ?
+                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(
+                                    (((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() + scrollAmount > 1) ?
                                             1 :
-                                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() + scrollAmount
+                                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() + scrollAmount
                             );
                         }
                     }
                     break;
+
                 case UP:
-                    if (EditAreaUtility.complitionTooltip.isShowing()) {
+
+                    // If Tooltip is showing, up arrow will navigate the Tooltip.
+                    if (EditAreaManager.complitionTooltip.isShowing()) {
+
+                        // Prevent event from propagating any further.
                         event.consume();
-                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent());
-                        if (EditAreaUtility.completionTooltipCurrentFocus <=  0) {
-                            EditAreaUtility.completionTooltipCurrentFocus = gp.getChildren().size();
-                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(1);
+
+                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent());
+                        if (EditAreaManager.completionTooltipCurrentFocus <=  0) {
+                            EditAreaManager.completionTooltipCurrentFocus = gp.getChildren().size();
+                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(1);
                         }
+
+                        // Add "label-focused" style class to the current Label being focused.
+                        // This styles it to show it is focused.
                         gp.getChildren().get(
-                                (EditAreaUtility.completionTooltipCurrentFocus >= gp.getChildren().size()) ?
-                                        0 : EditAreaUtility.completionTooltipCurrentFocus
+                                (EditAreaManager.completionTooltipCurrentFocus >= gp.getChildren().size()) ?
+                                        0 : EditAreaManager.completionTooltipCurrentFocus
                         ).getStyleClass().remove("label-focused");
+
+                        // Remove the style from the previous Label.
                         gp.getChildren().get(
-                                --EditAreaUtility.completionTooltipCurrentFocus
+                                --EditAreaManager.completionTooltipCurrentFocus
                         ).getStyleClass().add("label-focused");
-                        if (EditAreaUtility.completionTooltipCurrentFocus % 10 == 0 && EditAreaUtility.completionTooltipCurrentFocus != gp.getChildren().size() - 1) {
+
+                        // Scroll Tooltip if needed.
+                        if (EditAreaManager.completionTooltipCurrentFocus % 10 == 0 && EditAreaManager.completionTooltipCurrentFocus != gp.getChildren().size() - 1) {
                             double scrollAmount = 1.0 / ((gp.getChildren().size() % 10 != 0) ?
                                     (gp.getChildren().size() / 10) + 1 :
                                     (gp.getChildren().size() / 10));
-                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).setVvalue(
-                                    (((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() - scrollAmount < 0) ?
+                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(
+                                    (((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() - scrollAmount < 0) ?
                                             0 :
-                                            ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getVvalue() - scrollAmount
+                                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() - scrollAmount
                             );
                         }
                     }
                     break;
+
             }
             if (new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN).match(event)) {
+
+                // Prevent event from propagating any further.
                 event.consume();
-                EditAreaUtility.undo(this, true);
+                EditAreaManager.undoOrRedo(this, true);
             } else if (new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN).match(event)) {
+
+                // Prevent event from propagating any further.
                 event.consume();
-                EditAreaUtility.undo(this, false);
+                EditAreaManager.undoOrRedo(this, false);
             }
+
         });
 
+        // Filters for certain key being typed and acts before they modify anything.
         this.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
             int caretPosition = this.getCaretPosition();
             switch (event.getCharacter()) {
                 case "(":
+
+                    // Prevent event from propagating any further.
                     event.consume();
+
+                    // Check whether there is selected text.
                     if (this.getSelectedText().isEmpty()) {
+
+                        // Autocomplete with a closing bracket.
                         this.replaceText(caretPosition, caretPosition, "()");
                         this.moveTo(caretPosition + 1);
                     } else {
+
+                        // Enclose selected text in brackets.
                         this.replaceSelection(String.format("(%s)", this.getSelectedText()));
                     }
-                    EditAreaUtility.color(this);
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
                     break;
+
                 case "{":
+
+                    // Prevent event from propagating any further.
                     event.consume();
+
+                    // Check whether there is selected text.
                     if (this.getSelectedText().isEmpty()) {
+
+                        // Autocomplete with a closing brace.
                         this.replaceText(caretPosition, caretPosition, "{}");
                         this.moveTo(caretPosition + 1);
                     } else {
+
+                        // Enclose selected text in braces.
                         this.replaceSelection(String.format("{%s}", this.getSelectedText()));
                     }
-                    EditAreaUtility.color(this);
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
                     break;
+
                 case "[":
+
+                    // Prevent event from propagating any further.
                     event.consume();
+
+                    // Check whether there is selected text.
                     if (this.getSelectedText().isEmpty()) {
+
+                        // Autocomplete with a closing square bracket.
                         this.replaceText(caretPosition, caretPosition, "[]");
                         this.moveTo(caretPosition + 1);
                     } else {
+
+                        // Enclose selected text in square brackets.
                         this.replaceSelection(String.format("[%s]", this.getSelectedText()));
                     }
-                    EditAreaUtility.color(this);
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
                     break;
+
                 case "\"":
+
+                    // Prevent event from propagating any further.
                     event.consume();
+
+                    // Check whether there is selected text.
                     if (this.getSelectedText().isEmpty()) {
+
+                        // Autocomplete with a closing double quotation.
                         this.replaceText(caretPosition, caretPosition, "\"\"");
                         this.moveTo(caretPosition + 1);
                     } else {
+
+                        // Enclose selected text in double quotations.
                         this.replaceSelection(String.format("\"%s\"", this.getSelectedText()));
                     }
-                    EditAreaUtility.color(this);
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
                     break;
+
                 case "'":
+
+                    // Prevent event from propagating any further.
                     event.consume();
+
+                    // Check whether there is selected text.
                     if (this.getSelectedText().isEmpty()) {
+
+                        // Autocomplete with a closing single quotation.
                         this.replaceText(caretPosition, caretPosition, "''");
                         this.moveTo(caretPosition + 1);
                     } else {
+
+                        // Enclose selected text in single quotations.
                         this.replaceSelection(String.format("'%s'", this.getSelectedText()));
                     }
-                    EditAreaUtility.color(this);
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
                     break;
+
                 case "*":
+
+                    // Prevent event from propagating any further.
                     event.consume();
+
                     if (!this.getText().isEmpty() &&
                             this.getText().charAt(this.getCaretPosition() - 1) == '/') {
+
+                        // Autocomplete comment.
                         this.replaceText(caretPosition, caretPosition, "**/");
                         this.moveTo(caretPosition + 1);
                     } else {
+
+                        // Rewrite the * since event was consumed.
                         this.replaceText(caretPosition, caretPosition, "*");
                     }
-                    EditAreaUtility.color(this);
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
                     break;
             }
 
         });
 
+        // Reacts to a key press.
         this.setOnKeyPressed(event -> {
 
             int caretPosition = this.getCaretPosition();
+
+            // Check if the key was ENTER.
             if (Objects.requireNonNull(event.getCode()) == KeyCode.ENTER) {
                 String textHandlerResult = textHandler(this);
                 this.insertText(caretPosition, textHandlerResult);
@@ -207,6 +371,8 @@ public class CustomTextArea extends InlineCssTextArea {
                     this.moveTo(this.getCaretPosition() - moveCaret * 4);
                     moveCaret = 0;
                 }
+
+                // Autocomplete javadoc comment style.
                 if (this.getCaretPosition() >= 2 && this.getText().length() > 2 &&
                         this.getText().charAt(this.getCaretPosition() - 2) == '*' &&
                         this.getText().charAt(this.getCaretPosition()) == '*') {
@@ -219,26 +385,35 @@ public class CustomTextArea extends InlineCssTextArea {
         });
 
         if (isColored) {
-            this.setOnKeyTyped(event -> EditAreaUtility.color(this));
+
+            // Color the TextArea with each key typed.
+            this.setOnKeyTyped(event -> EditAreaManager.color(this));
         }
 
-        this.textProperty().addListener((observable, oldValue, newValue) -> {
+        // Mirror changes of TextArea to inner TextArea.
+        this.textProperty().addListener((observable, oldValue, newValue) -> this.innerTextArea.replaceText(newValue));
 
-            this.innerTextArea.replaceText(newValue);
-        });
-
-        this.caretPositionProperty().addListener((observable, oldValue, newValue) -> {
-
-            this.innerTextArea.moveTo(newValue);
-        });
+        // Move caret of inner TextArea with that of the TextArea.
+        this.caretPositionProperty().addListener((observable, oldValue, newValue) -> this.innerTextArea.moveTo(newValue));
 
     }
 
+    /**
+     * Retrieves the inner InlineCssTextArea
+     *
+     * @return the inner InlineCssTextArea.
+     */
     public InlineCssTextArea getInnerTextArea() {
 
         return this.innerTextArea;
     }
 
+    /**
+     * Uses other methods to apply indent.
+     *
+     * @param textArea The TextArea.
+     * @return The indent String.
+     */
     public String textHandler(InlineCssTextArea textArea) {
 
         String line = getLine(textArea);
@@ -250,6 +425,12 @@ public class CustomTextArea extends InlineCssTextArea {
 
     }
 
+    /**
+     * Retrieves the current line in the TextArea (Where the caret is).
+     *
+     * @param textArea The TextArea.
+     * @return The line.
+     */
     public String getLine(InlineCssTextArea textArea) {
 
         int caretPosition = textArea.getCaretPosition();
@@ -261,6 +442,14 @@ public class CustomTextArea extends InlineCssTextArea {
 
     }
 
+    /**
+     * Applies indent depending on the given line.
+     *
+     * @param line The current line where the caret is.
+     * @param caretLeft Character on the left of the caret.
+     * @param caretRight Character on the right of the caret.
+     * @return An indented String.
+     */
     public String applyIndent(String line, char caretLeft, char caretRight) {
 
         StringBuilder indent = new StringBuilder();
@@ -315,8 +504,14 @@ public class CustomTextArea extends InlineCssTextArea {
         }
 
         return indent.toString();
+
     }
 
+    /**
+     * Add an entry to the end of the undo stack.
+     *
+     * @param change The change in text.
+     */
     public void pushUndo(TextAreaChange change) {
 
         this.undoStack.addLast(change);
@@ -325,11 +520,21 @@ public class CustomTextArea extends InlineCssTextArea {
         }
     }
 
+    /**
+     * Remove the last entry in the undo stack.
+     *
+     * @return The change.
+     */
     public TextAreaChange popUndo() {
 
         return this.undoStack.pollLast();
     }
 
+    /**
+     * Add an entry to the end of the redo stack.
+     *
+     * @param change The change in text.
+     */
     public void pushRedo(TextAreaChange change) {
 
         this.redoStack.addLast(change);
@@ -338,6 +543,11 @@ public class CustomTextArea extends InlineCssTextArea {
         }
     }
 
+    /**
+     * Remove the last entry in the redo stack.
+     *
+     * @return The change.
+     */
     public TextAreaChange popRedo() {
 
         return this.redoStack.pollLast();

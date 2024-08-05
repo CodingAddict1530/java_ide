@@ -1,21 +1,60 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.utility;
 
 import com.project.custom_classes.SettingsResult;
 import com.project.custom_classes.Theme;
-import javafx.scene.control.*;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Spinner;
 import javafx.scene.layout.GridPane;
 import javafx.stage.DirectoryChooser;
-
 import javax.tools.ToolProvider;
 import java.io.File;
 import java.nio.file.Paths;
 import java.util.Objects;
 
+/**
+ * Utility dealing with settings dialog.
+ */
 public class SettingsUtility {
 
+    /**
+     * The DirectoryChooser.
+     */
     private static DirectoryChooser directoryChooser;
+
+    /**
+     * The TabPane.
+     */
     private static TabPane tabPane;
 
+    /**
+     * Creates a dialog to act as the settings page.
+     *
+     * @param javaPath The Path to the jdk
+     * @return The Dialog.
+     */
     public static Dialog<SettingsResult> createSettingsDialog(String javaPath) {
 
         Dialog<SettingsResult> dialog = new Dialog<>();
@@ -33,6 +72,7 @@ public class SettingsUtility {
         folderTextField.setText((javaPath == null) ? "" : javaPath);
         Button folderButton = new Button("Browse");
 
+        // Set an event handler on the button to open the Directory chooser.
         folderButton.setOnAction(event -> {
 
             directoryChooser.setTitle("Select folder");
@@ -77,6 +117,11 @@ public class SettingsUtility {
         return dialog;
     }
 
+    /**
+     * Get the path to jdk
+     *
+     * @return The Path.
+     */
     public static String getJavaPath() {
 
         if (ToolProvider.getSystemJavaCompiler() != null) {
@@ -85,13 +130,24 @@ public class SettingsUtility {
         return null;
     }
 
+    /**
+     * Sets up the DirectoryChooser.
+     *
+     * @param directoryChooser The directoryChooser.
+     */
     public static void setDirectoryChooser(DirectoryChooser directoryChooser) {
 
         SettingsUtility.directoryChooser = directoryChooser;
     }
 
+    /**
+     * Sets yp the TabPane.
+     *
+     * @param tabPane The TabPane.
+     */
     public static void setTabPane(TabPane tabPane) {
 
         SettingsUtility.tabPane = tabPane;
     }
+
 }

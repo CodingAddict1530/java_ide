@@ -1,23 +1,79 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.managers;
 
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
-import com.project.utility.EditAreaUtility;
-import com.project.utility.LanguageStatusParams;
+import com.project.custom_classes.LanguageStatusParams;
 import javafx.application.Platform;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.lsp4j.*;
+import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.ShowMessageRequestParams;
+import org.eclipse.lsp4j.RegistrationParams;
+import org.eclipse.lsp4j.UnregistrationParams;
+import org.eclipse.lsp4j.MessageActionItem;
+import org.eclipse.lsp4j.InitializedParams;
+import org.eclipse.lsp4j.InitializeParams;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.InitializeResult;
+import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.DidCloseTextDocumentParams;
+import org.eclipse.lsp4j.TextDocumentIdentifier;
+import org.eclipse.lsp4j.SignatureHelp;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
+import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
+import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.SignatureHelpParams;
+import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.DidChangeWorkspaceFoldersParams;
+import org.eclipse.lsp4j.WorkspaceFoldersChangeEvent;
+import org.eclipse.lsp4j.WillSaveTextDocumentParams;
+import org.eclipse.lsp4j.TextDocumentSaveReason;
+import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.FileEvent;
+import org.eclipse.lsp4j.FileChangeType;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.TextDocumentSyncOptions;
+import org.eclipse.lsp4j.TextDocumentSyncKind;
+import org.eclipse.lsp4j.SaveOptions;
+import org.eclipse.lsp4j.Registration;
+import org.eclipse.lsp4j.CompletionOptions;
+import org.eclipse.lsp4j.HoverOptions;
+import org.eclipse.lsp4j.SignatureHelpOptions;
+import org.eclipse.lsp4j.DiagnosticRegistrationOptions;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.jsonrpc.services.JsonNotification;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageServer;
-
-import java.io.*;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -26,15 +82,43 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Handles language server related operations.
+ */
 public class JLSManager {
 
+    /**
+     * The logger for the class.
+     */
     private static final Logger logger = LogManager.getLogger(JLSManager.class);
 
+    /**
+     * The language server interface.
+     */
     private static LanguageServer languageServer;
+
+    /**
+     * Contains open projects.
+     */
     private static final ArrayList<WorkspaceFolder> workspaceFolders = new ArrayList<>();
+
+    /**
+     * Stores the current number of resets the server has made.
+     */
+    private static final AtomicInteger numberOfResets = new AtomicInteger(0);
+
+    /**
+     * The language client.
+     */
     private static final LanguageClient languageClient = new LanguageClient() {
 
+        /**
+         * Receives telemetry events from server.
+         *
+         * @param o The telemetry event.
+         */
         @Override
         public void telemetryEvent(Object o) {
             try {
@@ -42,9 +126,15 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
         }
 
+        /**
+         * Receives diagnostics from server.
+         *
+         * @param diagnostics The diagnostics.
+         */
         @Override
         public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
             try {
@@ -52,9 +142,15 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
         }
 
+        /**
+         * Receives messages from the server.
+         *
+         * @param messageParams The messages.
+         */
         @Override
         public void showMessage(MessageParams messageParams) {
             try {
@@ -62,9 +158,16 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
         }
 
+        /**
+         * Receives message requests from the server.
+         *
+         * @param requestParams The request parameters.
+         * @return null.
+         */
         @Override
         public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams requestParams) {
             try {
@@ -72,10 +175,17 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
             return null;
         }
 
+        /**
+         * Receives registered capabilities from the server.
+         *
+         * @param params The registration parameters.
+         * @return null
+         */
         @Override
         public CompletableFuture<Void> registerCapability(RegistrationParams params) {
             try {
@@ -84,10 +194,17 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
                 return null;
             }
         }
 
+        /**
+         * Receives unregistered capabilities from the server.
+         *
+         * @param params The unregistration parameters.
+         * @return null.
+         */
         @Override
         public CompletableFuture<Void> unregisterCapability(UnregistrationParams params) {
             try {
@@ -96,10 +213,16 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
                 return null;
             }
         }
 
+        /**
+         * Receives server request for workspace folders.
+         *
+         * @return The workspace folders.
+         */
         @Override
         public CompletableFuture<java.util.List<WorkspaceFolder>> workspaceFolders() {
             try {
@@ -107,10 +230,16 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
                 return null;
             }
         }
 
+        /**
+         * Receives logs from the server.
+         *
+         * @param messageParams The message parameters.
+         */
         @Override
         public void logMessage(MessageParams messageParams) {
             try {
@@ -118,9 +247,15 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
         }
 
+        /**
+         * Receives status notifications from the server.
+         *
+         * @param params The status parameters.
+         */
         @JsonNotification("language/status")
         public void languageStatus(LanguageStatusParams params) {
             try {
@@ -128,9 +263,15 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
         }
 
+        /**
+         * Receives event notifications from the server.
+         *
+         * @param params The parameters.
+         */
         @JsonNotification("language/eventNotification")
         public void languageEventNotification(Object params) {
             try {
@@ -138,16 +279,22 @@ public class JLSManager {
             } catch (Exception e) {
                 logger.error(e);
                 resetServer();
+                incrementNOR();
             }
         }
 
     };
 
+    /**
+     * Starts the server.
+     */
     public static void startServer() {
 
         try {
 
             String config = "";
+
+            // Determine what config file to use.
             if (System.getProperty("os.name").toLowerCase().contains("windows")) {
                 config = "config_win";
             } else if (System.getProperty("os.name").toLowerCase().contains("linux")) {
@@ -182,23 +329,30 @@ public class JLSManager {
                     "-data", "jdt_data"
             };
             ProcessBuilder processBuilder = new ProcessBuilder(command);
+
+            // Redirect error stream to output.
             processBuilder.redirectErrorStream(true);
 
             Process process = processBuilder.start();
             InputStream inputStream = process.getInputStream();
             OutputStream outputStream = process.getOutputStream();
 
+            // Launch the server.
             Launcher<LanguageServer> launcher = LSPLauncher.createClientLauncher(languageClient, inputStream, outputStream);
             launcher.startListening();
             languageServer = launcher.getRemoteProxy();
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error(e);
         }
 
     }
 
+    /**
+     * Stops the server.
+     */
     public static void stopServer() {
 
+        // Send didClose notification for each file closed.
         for (OpenFile o : OpenFilesTracker.getOpenFiles()) {
             JLSManager.didClose(o.getFile().toPath());
         }
@@ -214,10 +368,15 @@ public class JLSManager {
 
     }
 
+    /**
+     * Initializes the server.
+     */
     public static void initializeServer() {
 
         InitializeParams initializeParams = new InitializeParams();
         long pid = ProcessHandle.current().pid();
+
+        // Check if process id can be safely downcast.
         if (pid > Integer.MAX_VALUE || pid < Integer.MIN_VALUE) {
             System.out.println("YIKES! PID: " + pid);
             logger.fatal("PID: {} cant be safely converted to int", pid);
@@ -225,10 +384,12 @@ public class JLSManager {
         }
         initializeParams.setProcessId((int) pid);
 
+        // Send initialize request.
         CompletableFuture<InitializeResult> initializeFuture = languageServer.initialize(initializeParams);
         initializeFuture.thenAccept(result -> {
             logger.info("Initialization successful. Capabilities: {}", result.getCapabilities());
 
+            // Register capabilities.
             registerSync();
             registerCompletion();
             registerHover();
@@ -243,6 +404,12 @@ public class JLSManager {
 
     }
 
+    /**
+     * Notifies the server that a file has been opened.
+     *
+     * @param path The Path to the file.
+     * @param content The current contents of the file.
+     */
     public static void didOpen(Path path, String content) {
 
         TextDocumentItem tdi = new TextDocumentItem();
@@ -255,6 +422,13 @@ public class JLSManager {
 
     }
 
+    /**
+     * Notifies the server that a file has changed.
+     *
+     * @param path The Path to the file.
+     * @param content The contents of the file.
+     * @param version The version of the file (Increment the previous version).
+     */
     public static void didChange(Path path, String content, int version) {
 
         TextDocumentItem tdi = new TextDocumentItem();
@@ -276,6 +450,11 @@ public class JLSManager {
 
     }
 
+    /**
+     * Notifies the server that a file was closed.
+     *
+     * @param path The Path to the file.
+     */
     public static void didClose(Path path) {
 
         TextDocumentIdentifier textDocumentIdentifier = new TextDocumentIdentifier(path.toUri().toString());
@@ -284,6 +463,13 @@ public class JLSManager {
 
     }
 
+    /**
+     * Requests the server to complete code.
+     *
+     * @param path The Path to the file.
+     * @param position The position in the file.
+     * @return A list completion items.
+     */
     public static List<CompletionItem> complete(Path path, Position position) {
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -293,23 +479,30 @@ public class JLSManager {
         completionParams.setPosition(position);
 
         final List<CompletionItem>[] returnValue = new List[]{null};
+
+        // Request completion.
         CompletableFuture<Either<List<CompletionItem>, CompletionList>> futureCompletion = languageServer.getTextDocumentService().completion(completionParams);
-        // Handle the response
         futureCompletion.thenAccept(completionItems -> {
             if (completionItems != null) {
+
                 // Process the completion items
                 returnValue[0] = completionItems.isLeft() ? completionItems.getLeft() : completionItems.getRight().getItems();
-                latch.countDown();
             } else {
                 System.out.println("No completion items found.");
-                latch.countDown();
             }
+
+            // Release the thread.
+            latch.countDown();
         }).exceptionally(ex -> {
             System.err.println("Error while fetching completion items: " + ex.getMessage());
+
+            // Release the thread.
             latch.countDown();
             return null;
         });
         try {
+
+            // Wait for the completion items to be returned by the server.
             latch.await();
         } catch (Exception e) {
             logger.error(e);
@@ -318,6 +511,13 @@ public class JLSManager {
 
     }
 
+    /**
+     * Requests the server for signature helps.
+     *
+     * @param path The Path to the file.
+     * @param position The position in the file.
+     * @return A SignatureHelp Object.
+     */
     public static SignatureHelp getSignatureHelp(Path path, Position position) {
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -327,24 +527,31 @@ public class JLSManager {
         params.setPosition(position);
 
         final SignatureHelp[] returnValue = new SignatureHelp[1];
-        CompletableFuture<SignatureHelp> futureSignatureHelp = languageServer.getTextDocumentService().signatureHelp(params);
 
-        // Handle the response
+        // Send request to server.
+        CompletableFuture<SignatureHelp> futureSignatureHelp = languageServer.getTextDocumentService().signatureHelp(params);
         futureSignatureHelp.thenAccept(signatureHelp -> {
             if (signatureHelp != null) {
+
                 // Process the signature help
                 returnValue[0] = signatureHelp;
             } else {
                 System.out.println("No signature help available.");
             }
+
+            // Release the thread.
             latch.countDown();
         }).exceptionally(ex -> {
             System.err.println("Error while fetching signature help: " + ex.getMessage());
+
+            // Release the thread.
             latch.countDown();
             return null;
         });
 
         try {
+
+            // Wait for completion items to be returned by the server.
             latch.await();
         } catch (InterruptedException e) {
             logger.error(e);
@@ -354,6 +561,13 @@ public class JLSManager {
 
     }
 
+    /**
+     * Requests the server do details about a token hovered upon.
+     *
+     * @param path The Path to the file.
+     * @param position The position in the file.
+     * @return A Hover Object with the details.
+     */
     public static Hover getHover(Path path, Position position) {
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -363,24 +577,31 @@ public class JLSManager {
         params.setPosition(position);
 
         final Hover[] returnValue = new Hover[1];
-        CompletableFuture<Hover> futureHover = languageServer.getTextDocumentService().hover(params);
 
-        // Handle the response
+        // Send the request.
+        CompletableFuture<Hover> futureHover = languageServer.getTextDocumentService().hover(params);
         futureHover.thenAccept(hover -> {
             if (hover != null) {
+
                 // Process the hover information
                 returnValue[0] = hover;
             } else {
                 System.out.println("No hover information available.");
             }
+
+            // Release the thread.
             latch.countDown();
         }).exceptionally(ex -> {
             System.err.println("Error while fetching hover information: " + ex.getMessage());
+
+            // Release the thread.
             latch.countDown();
             return null;
         });
 
         try {
+
+            // Wait for the server to return the information.
             latch.await();
         } catch (InterruptedException e) {
             logger.error(e);
@@ -390,18 +611,50 @@ public class JLSManager {
 
     }
 
+    /**
+     * Request server to change the workspace folder.
+     *
+     * @param uri The URI to the folder.
+     * @param name The name to identify the workspace folder.
+     * @param add Whether to add or remove the folder.
+     */
     public static void changeWorkSpaceFolder(String uri, String name, boolean add) {
 
+        boolean found = false;
+
+        // Check whether
+
         for (WorkspaceFolder workspaceFolder : workspaceFolders) {
-            if (workspaceFolder.getUri().equals(uri)) {
+            if (add && workspaceFolder.getUri().equals(uri)) {
                 return;
+            } else if (!add && workspaceFolder.getUri().equals(uri)) {
+                found = true;
+                break;
             }
         }
-        workspaceFolders.add(new WorkspaceFolder(uri, name));
+        if (!found && !add) {
+            return;
+        }
+        if (add) {
+            workspaceFolders.add(new WorkspaceFolder(uri, name));
+        } else {
+            for (WorkspaceFolder workspaceFolder : workspaceFolders) {
+                if (workspaceFolder.getUri().equals(uri)) {
+                    workspaceFolders.remove(new WorkspaceFolder(uri, name));
+                    break;
+                }
+            }
+
+        }
         sendDCWFN(add);
 
     }
 
+    /**
+     * Sends a did change workspace folder notification to the server.
+     *
+     * @param add Whether a workspace folder was added or removed.
+     */
     public static void sendDCWFN(boolean add) {
 
         DidChangeWorkspaceFoldersParams params = new DidChangeWorkspaceFoldersParams();
@@ -419,121 +672,83 @@ public class JLSManager {
 
     }
 
+    /**
+     * Sends a willSave notification to the server.
+     *
+     * @param uri The URI of the file.
+     */
     public static void sendWillSave(String uri) {
 
-        // Create parameters for the willSave notification
         WillSaveTextDocumentParams params = new WillSaveTextDocumentParams();
         params.setTextDocument(new TextDocumentIdentifier(uri));
-        params.setReason(TextDocumentSaveReason.Manual); // Reason for the save event, e.g., TextDocumentSaveReason.Manual
 
-        // Send the willSave notification
+        // Reason for the save event
+        params.setReason(TextDocumentSaveReason.Manual);
+
         languageServer.getTextDocumentService().willSave(params);
 
     }
 
+    /**
+     * Sends a didSave notification to the server.
+     *
+     * @param uri The URI of the file.
+     * @param content The contents of the file.
+     */
     public static void sendDidSave(String uri, String content) {
 
-        // Create parameters for the didSave notification
         DidSaveTextDocumentParams params = new DidSaveTextDocumentParams();
-        params.setText(content); // Optionally provide the document text if needed
-
-        // Set the URI of the document that was saved
+        params.setText(content);
         params.setTextDocument(new TextDocumentIdentifier(uri));
 
-        // Send the didSave notification
         languageServer.getTextDocumentService().didSave(params);
 
     }
 
+    /**
+     * Notifies the server that a file has been deleted
+     *
+     * @param uri The URI of the file.
+     */
     public static void sendDeletedFile(String uri) {
 
         FileEvent fileEvent = new FileEvent(uri, FileChangeType.Deleted);
-
-        // Create DidChangeWatchedFilesParams with the file event
         DidChangeWatchedFilesParams params = new DidChangeWatchedFilesParams(Collections.singletonList(fileEvent));
 
-        // Send the notification to the language server
         languageServer.getWorkspaceService().didChangeWatchedFiles(params);
 
     }
 
+    /**
+     * Handles diagnostics from the server.
+     *
+     * @param diagnostics The Diagnostics.
+     */
     private static void handleDiagnostics(PublishDiagnosticsParams diagnostics) {
 
         List<Diagnostic> diagnosticList = diagnostics.getDiagnostics();
+
+        // Ignore empty diagnostics.
         if (diagnosticList.isEmpty()) {
             return;
         }
         for (Diagnostic diagnostic : diagnosticList) {
-            Platform.runLater(() ->
-                    {
-                        try {
-                            EditAreaUtility.processDiagnostic(diagnostic, Paths.get(new URI(diagnostics.getUri())));
-                        } catch (Exception e) {
-                            logger.error(e);
-                        }
-                    }
-                    );
+
+            // Use JavaFX thread since changes involve UI update.
+            Platform.runLater(() -> {
+                try {
+                    EditAreaManager.processDiagnostic(diagnostic, Paths.get(new URI(diagnostics.getUri())));
+                } catch (Exception e) {
+                    logger.error(e);
+                }
+            });
         }
 
     }
 
-    private static TextDocumentClientCapabilities getTDCCapabilities() {
-
-        // Text Document Capabilities
-        TextDocumentClientCapabilities textDocumentCapabilities = new TextDocumentClientCapabilities();
-
-        // Synchronization
-        SynchronizationCapabilities syncCapabilities = new SynchronizationCapabilities(true, false, true, true);
-        textDocumentCapabilities.setSynchronization(syncCapabilities);
-
-        // Completion
-        CompletionCapabilities completionCapabilities = new CompletionCapabilities();
-        completionCapabilities.setDynamicRegistration(true); // Enable dynamic registration
-        CompletionItemCapabilities completionItemCapabilities = new CompletionItemCapabilities();
-        completionItemCapabilities.setSnippetSupport(true); // Support snippets
-        completionItemCapabilities.setCommitCharactersSupport(true); // Support commit characters
-        completionCapabilities.setCompletionItem(completionItemCapabilities);
-        textDocumentCapabilities.setCompletion(completionCapabilities);
-
-        // Hover
-        HoverCapabilities hoverCapabilities = new HoverCapabilities(Collections.singletonList(MarkupKind.PLAINTEXT),true);
-        textDocumentCapabilities.setHover(hoverCapabilities);
-
-        // Signature Help
-        SignatureInformationCapabilities signatureInformationCapabilities = new SignatureInformationCapabilities(
-                Arrays.asList(MarkupKind.MARKDOWN, MarkupKind.PLAINTEXT)
-        );
-        signatureInformationCapabilities.setParameterInformation(new ParameterInformationCapabilities(true));
-        signatureInformationCapabilities.setActiveParameterSupport(true);
-        SignatureHelpCapabilities signatureHelpCapabilities = new SignatureHelpCapabilities(
-                signatureInformationCapabilities, true
-        );
-        signatureHelpCapabilities.setContextSupport(true);
-        textDocumentCapabilities.setSignatureHelp(signatureHelpCapabilities);
-
-        // Diagnostics
-        DiagnosticCapabilities diagnosticCapabilities = new DiagnosticCapabilities(true, true);
-        textDocumentCapabilities.setDiagnostic(diagnosticCapabilities);
-
-        return textDocumentCapabilities;
-
-    }
-
-    private static WorkspaceClientCapabilities getWCCapabilities() {
-
-        // Workspace-related capabilities
-        WorkspaceClientCapabilities workspaceClientCapabilities = new WorkspaceClientCapabilities();
-        workspaceClientCapabilities.setWorkspaceEdit(new WorkspaceEditCapabilities()); // Example configuration
-        workspaceClientCapabilities.setDidChangeConfiguration(new DidChangeConfigurationCapabilities()); // Example configuration
-        workspaceClientCapabilities.setDidChangeWatchedFiles(new DidChangeWatchedFilesCapabilities()); // Example configuration
-        workspaceClientCapabilities.setSymbol(new SymbolCapabilities());
-        workspaceClientCapabilities.setExecuteCommand(new ExecuteCommandCapabilities());
-        workspaceClientCapabilities.setWorkspaceFolders(true);
-        workspaceClientCapabilities.setConfiguration(true);
-
-        return workspaceClientCapabilities;
-    }
-
+    /**
+     * Restarts the server.
+     */
     private static void resetServer() {
 
         FileManager.saveFiles(OpenFilesTracker.getOpenFiles());
@@ -541,22 +756,29 @@ public class JLSManager {
         startServer();
         for (OpenFile o: OpenFilesTracker.getOpenFiles()) {
             StringBuilder text = new StringBuilder();
+
+            // Read the contents of the file.
             ArrayList<String> lines = FileManager.readFile(o.getFile().toPath());
             if (lines != null) {
                 for (String line : lines) {
                     text.append(line).append("\n");
                 }
             }
-            JLSManager.didOpen(o.getFile().toPath(), text.toString());
+
+            // Send didOpen notification to the server.
+            didOpen(o.getFile().toPath(), text.toString());
         }
 
     }
 
+    /**
+     * Registers synchronization capabilities.
+     */
     public static void registerSync() {
 
         TextDocumentSyncOptions syncOptions = new TextDocumentSyncOptions();
         syncOptions.setOpenClose(true);
-        syncOptions.setChange(TextDocumentSyncKind.Incremental); // or Full
+        syncOptions.setChange(TextDocumentSyncKind.Incremental);
         syncOptions.setWillSave(true);
         syncOptions.setWillSaveWaitUntil(false);
         syncOptions.setSave(new SaveOptions(true));
@@ -575,33 +797,40 @@ public class JLSManager {
 
     }
 
+    /**
+     * Registers completion capabilities.
+     */
     public static void registerCompletion() {
 
         CompletionOptions completionOptions = new CompletionOptions();
-        completionOptions.setResolveProvider(true); // Whether the server supports resolving completion items
-        completionOptions.setTriggerCharacters(List.of(".", "(", "\"", "'", ":", "@", "[", "{", " "));
+        completionOptions.setResolveProvider(true);
+        completionOptions.setTriggerCharacters(getCompletionCharacters());
 
         // Define the registration parameters
         RegistrationParams params = new RegistrationParams();
         params.setRegistrations(Collections.singletonList(
                 new Registration(
                         "completionCapability", // Unique ID for the capability
-                        "textDocument/completion", // The capability to register
-                        completionOptions // Typically used with completion capabilities
+                        "textDocument/completion",
+                        completionOptions
                 )
         ));
+
         languageClient.registerCapability(params);
 
     }
 
+    /**
+     * Registers hover capabilities.
+     */
     public static void registerHover() {
 
         RegistrationParams params = new RegistrationParams();
         params.setRegistrations(Collections.singletonList(
                 new Registration(
                         "hoverCapability", // Unique ID for the capability
-                        "textDocument/hover", // The capability to register
-                        new HoverOptions() // Registration options for text documents
+                        "textDocument/hover",
+                        new HoverOptions()
                 )
         ));
 
@@ -609,10 +838,12 @@ public class JLSManager {
 
     }
 
+    /**
+     * Registers signature help capabilities.
+     */
     public static void registerSignatureHelp() {
 
         SignatureHelpOptions signatureHelpOptions = new SignatureHelpOptions();
-        // Optionally configure the SignatureHelpOptions if needed
         signatureHelpOptions.setTriggerCharacters(Arrays.asList("(", ","));
 
         // Define the registration parameters
@@ -620,25 +851,76 @@ public class JLSManager {
         params.setRegistrations(Collections.singletonList(
                 new Registration(
                         "signatureHelpCapability", // Unique ID for the capability
-                        "textDocument/signatureHelp", // The capability to register
-                        signatureHelpOptions // Registration options for text documents
+                        "textDocument/signatureHelp",
+                        signatureHelpOptions
                 )
         ));
+
         languageClient.registerCapability(params);
 
     }
 
+    /**
+     * Registers diagnostic capabilities.
+     */
     public static void registerDiagnostic() {
 
         RegistrationParams params = new RegistrationParams();
         params.setRegistrations(Collections.singletonList(
                 new Registration(
                         "diagnosticCapability", // Unique ID for the capability
-                        "textDocument/publishDiagnostics", // The capability to register
-                        new DiagnosticRegistrationOptions() // Registration options for text documents
+                        "textDocument/publishDiagnostics",
+                        new DiagnosticRegistrationOptions()
                 )
         ));
+
         languageClient.registerCapability(params);
 
     }
+
+    /**
+     * Increments numberOfResets.
+     * Stops the server it the number of resets exceeds 5.
+     */
+    private static void incrementNOR() {
+
+        if (numberOfResets.get() > 5) {
+            stopServer();
+            System.out.println("SERVER ERROR!");
+        }
+
+        numberOfResets.incrementAndGet();
+
+    }
+
+    /**
+     * Generates a list of characters to trigger completions.
+     *
+     * @return The List.
+     */
+    private static List<String> getCompletionCharacters() {
+
+        List<String> list = new ArrayList<>();
+
+        // Add digits 0-9
+        for (char c = '0'; c <= '9'; c++) {
+            list.add(String.valueOf(c));
+        }
+
+        // Add uppercase letters A-Z
+        for (char c = 'A'; c <= 'Z'; c++) {
+            list.add(String.valueOf(c));
+        }
+
+        // Add lowercase letters a-z
+        for (char c = 'a'; c <= 'z'; c++) {
+            list.add(String.valueOf(c));
+        }
+
+        list.addAll(List.of(".", "(", "\"", "'", ":", "@", "[", "{", " "));
+
+        return list;
+
+    }
+
 }

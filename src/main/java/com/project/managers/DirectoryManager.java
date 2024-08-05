@@ -1,10 +1,35 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.managers;
 
-import com.project.custom_classes.*;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
+import com.project.custom_classes.CustomTreeItem;
+import com.project.custom_classes.RootTreeNode;
+import com.project.custom_classes.DirectoryTreeNode;
+import com.project.custom_classes.FileTreeNode;
+import com.project.custom_classes.CustomTreeLabel;
+import com.project.custom_classes.TreeNode;
 import javafx.geometry.Pos;
-import javafx.scene.control.*;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TreeView;
+import javafx.scene.control.TreeCell;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.Clipboard;
@@ -16,32 +41,79 @@ import javafx.stage.DirectoryChooser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.project.utility.MainUtility;
-
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileVisitResult;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Handles directory related operations.
+ */
 public class DirectoryManager {
 
+    /**
+     * The logger for the class.
+     */
     private static final Logger logger = LogManager.getLogger(DirectoryManager.class);
-    private static final Map<CustomTreeItem<HBox>, Boolean> nodeIsOpen = new HashMap<>();
 
+    /**
+     * Stores a CustomTreeItem and whether is it open or closed.
+     */
+    private static final Map<String, Boolean> nodeIsOpen = new HashMap<>();
+
+    /**
+     * An instance of a DirectoryChooser to choose files from the device.
+     */
     private static DirectoryChooser directoryChooser;
+
+    /**
+     * The TabPane.
+     */
     private static TabPane tabPane;
+
+    /**
+     * An array containing the path of the currently open project.
+     */
     private static ArrayList<Path> openProjectPath;
+
+    /**
+     * Contains the TreeView of the current project.
+     */
     private static VBox projectView;
+
+    /**
+     * The system clipboard.
+     */
     private static Clipboard clipboard;
+
+    /**
+     * Whether the operation is a cut or a copy.
+     */
     private static ArrayList<Boolean> shouldCut;
 
+    /**
+     * Opens an existing project.
+     *
+     * @param path The Path to the root directory
+     * @return The path to the root directory.
+     */
     public static Path openProject(Path path) {
 
         File dir;
+
+        // Check whether there was a Path passed
         if (path == null) {
+
+            // If none prompt user to pick one.
             directoryChooser.setTitle("Select a Directory");
             if (ProjectManager.APP_HOME.exists()) {
                 directoryChooser.setInitialDirectory(ProjectManager.APP_HOME);
@@ -63,6 +135,8 @@ public class DirectoryManager {
                 } else {
                 openProjectPath.set(0, root.getPath());
                 }
+
+                // Create a TreeView and place it in projectView.
                 TreeView<HBox> treeView = createTree(root);
                 projectView.getChildren().clear();
                 projectView.getChildren().add(treeView);
@@ -77,13 +151,20 @@ public class DirectoryManager {
 
     }
 
+    /**
+     * Replicates a directory structure as tree using TreeNode Objects.
+     *
+     * @param path The Path to the directory
+     * @return The RootTreeNode.
+     */
     public static RootTreeNode parseDirectory(Path path) {
 
-        RootTreeNode rootDirectory = new RootTreeNode(path);
         if (!Files.exists(path) || !Files.isDirectory(path)) {
             logger.error("Couldn't open directory: {}", path.toString());
             return null;
         }
+
+        RootTreeNode rootDirectory = new RootTreeNode(path);
         Map<Path, DirectoryTreeNode> pathMap = new HashMap<>();
         pathMap.put(path, rootDirectory);
 
@@ -122,48 +203,55 @@ public class DirectoryManager {
 
     }
 
+    /**
+     * Creates a TreeView from the RootTreeNode.
+     *
+     * @param root The RootTreeNode.
+     * @return The TreeView.
+     */
     public static TreeView<HBox> createTree(RootTreeNode root) {
 
-        HBox hBox = new HBox();
-        ImageView icon = new ImageView(
-                    new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/folder.png"))));
-        MainUtility.sizeImage(icon, 18, 18);
-        hBox.getChildren().add(icon);
-        hBox.getChildren().add(new CustomTreeLabel("  " + root.getName(), root.getPath()));
-        hBox.setAlignment(Pos.CENTER_LEFT);
-        CustomTreeItem<HBox> rootItem = new CustomTreeItem<>(hBox, root.getPath());
+        CustomTreeItem<HBox> rootItem = initTreeItem(new ImageView(
+                new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/folder.png")))), root);
 
-        if (nodeIsOpen.containsKey(rootItem)) {
-            rootItem.setExpanded(nodeIsOpen.get(rootItem));
+        // Check whether the TreeItem had a state before and use it.
+        if (nodeIsOpen.containsKey(rootItem.getPath().toString())) {
+            rootItem.setExpanded(nodeIsOpen.get(rootItem.getPath().toString()));
         } else {
+
+            // Else, default the root to be expanded.
             rootItem.setExpanded(true);
-            nodeIsOpen.put(rootItem, Boolean.TRUE);
+            nodeIsOpen.put(rootItem.getPath().toString(), Boolean.TRUE);
         }
-        rootItem.expandedProperty().addListener(new ChangeListener<Boolean>() {
 
-            @Override
-            public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-                if (!nodeIsOpen.containsKey(rootItem)) {
-                    logger.error("For some reason, {} is not in nodeIsOpen", rootItem.getPath());
-                } else {
-                    nodeIsOpen.replace(rootItem, newValue);
-                }
+        // Add a listener to detect when the TreeItem is expanded or closed.
+        rootItem.expandedProperty().addListener((observable, oldValue, newValue) -> {
+            if (!nodeIsOpen.containsKey(rootItem.getPath().toString())) {
+                logger.error("For some reason, {} is not in nodeIsOpen", rootItem.getPath());
+            } else {
+                nodeIsOpen.replace(rootItem.getPath().toString(), newValue);
             }
-
         });
+
+        // Add children to the root TreeItem.
         addChildren(root, rootItem);
+
+        // Create a TreeView.
         TreeView<HBox> treeView = new TreeView<>(rootItem);
+
+        // Add an event filter for when an item is double-clicked.
         treeView.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
             if (event.getClickCount() == 2) {
-                TreeItem<HBox> selectedItem = treeView.getSelectionModel().getSelectedItem();
-                CustomTreeItem<HBox> item = (CustomTreeItem<HBox>) selectedItem;
+                CustomTreeItem<HBox> selectedItem = (CustomTreeItem<HBox>) treeView.getSelectionModel().getSelectedItem();
                 if (selectedItem != null) {
-                    FileManager.openFile(item.getPath());
+
+                    // Open the file.
+                    FileManager.openFile(selectedItem.getPath());
                 }
             }
         });
 
-        treeView.setCellFactory(tv -> new TreeCell<>() {
+        treeView.setCellFactory(tc -> new TreeCell<>() {
 
             @Override
             protected void updateItem(HBox item, boolean empty) {
@@ -241,8 +329,33 @@ public class DirectoryManager {
 
     }
 
+    /**
+     * Initializes a CustomTreeItem.
+     *
+     * @param icon The icon.
+     * @param root The TreeNode.
+     * @return A CustomTreeItem.
+     */
+    private static CustomTreeItem<HBox> initTreeItem(ImageView icon, TreeNode root) {
+
+        HBox hBox = new HBox();
+        MainUtility.sizeImage(icon, 18, 18);
+        hBox.getChildren().add(icon);
+        hBox.getChildren().add(new CustomTreeLabel("  " + root.getName(), root.getPath()));
+        hBox.setAlignment(Pos.CENTER_LEFT);
+
+        return new CustomTreeItem<>(hBox, root.getPath());
+    }
+
+    /**
+     * Adds children to a TreeItem if any.
+     *
+     * @param parentNode The TreeNode. (Represented on the TreeNode hierarchy).
+     * @param parentItem The TreeItem. (Represented on the TreeView).
+     */
     public static void addChildren(TreeNode parentNode, CustomTreeItem<HBox> parentItem) {
 
+        // They look the same, but this allows directories to come before files in the TreeView.
         for (TreeNode childNode : parentNode.getChildren()) {
 
             if (childNode.getPath().toFile().isDirectory()) {
@@ -260,44 +373,60 @@ public class DirectoryManager {
         }
     }
 
+    /**
+     * Adds a child to a TreeItem.
+     *
+     * @param parentItem The parent.
+     * @param childNode The child.
+     */
     private static void add(CustomTreeItem<HBox> parentItem, TreeNode childNode) {
-        HBox hBox = new HBox();
+
         String[] parts = childNode.getName().split("\\.");
+
+        // Determine what icon to use.
         ImageView icon = new ImageView((childNode instanceof DirectoryTreeNode) ?
                 new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/folder.png"))) :
                 (Objects.equals(parts[parts.length - 1], "java")) ? new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/java.png"))) :
                         new Image(Objects.requireNonNull(DirectoryManager.class.getResourceAsStream("icons/file.png"))));
-        MainUtility.sizeImage(icon, 18, 18);
-        hBox.getChildren().add(icon);
-        hBox.getChildren().add(new CustomTreeLabel("  " + childNode.getName(), childNode.getPath()));
-        hBox.setAlignment(Pos.CENTER_LEFT);
-        CustomTreeItem<HBox> childItem = new CustomTreeItem<>(hBox, childNode.getPath());
-        if (nodeIsOpen.containsKey(childItem)) {
-            childItem.setExpanded(nodeIsOpen.get(childItem));
+
+        // Create the CustomTreeItem for the child.
+        CustomTreeItem<HBox> childItem = initTreeItem(icon, childNode);
+
+        // Check previous state of the node.
+        if (nodeIsOpen.containsKey(childItem.getPath().toString())) {
+            childItem.setExpanded(nodeIsOpen.get(childItem.getPath().toString()));
         } else {
             childItem.setExpanded(false);
-            nodeIsOpen.put(childItem, Boolean.FALSE);
+            nodeIsOpen.put(childItem.getPath().toString(), Boolean.FALSE);
         }
-        childItem.expandedProperty().addListener(new ChangeListener<Boolean>() {
 
-            @Override
-            public void changed(ObservableValue<? extends Boolean> observable, Boolean oldValue, Boolean newValue) {
-                if (!nodeIsOpen.containsKey(childItem)) {
-                    logger.error("For some reason, {} is not in nodeIsOpen", childItem.getPath());
-                } else {
-                    nodeIsOpen.replace(childItem, newValue);
-                }
+        // Listen for when the TreeItem is expanded or closed.
+        childItem.expandedProperty().addListener((observable, oldValue, newValue) -> {
+            if (!nodeIsOpen.containsKey(childItem.getPath().toString())) {
+                logger.error("For some reason, {} is not in nodeIsOpen", childItem.getPath());
+            } else {
+                nodeIsOpen.replace(childItem.getPath().toString(), newValue);
             }
-
         });
+
+        // Add the childItem.
         parentItem.getChildren().add(childItem);
+
+        // If the childItem is a directory, add children to the childItem.
         if (childNode instanceof DirectoryTreeNode) {
             addChildren(childNode, childItem);
         }
+
     }
 
+    /**
+     * Creates a new package (directory).
+     *
+     * @param path The Path of the parent directory.
+     */
     public static void newPackage(Path path) {
 
+        // Prompt user to enter a name for the new package.
         String name = MainUtility.quickDialog("New package", "Enter package name");
         if (name == null) {
             return;
@@ -310,12 +439,17 @@ public class DirectoryManager {
         } else {
             System.out.println("Package already exists");
         }
-        ProjectManager.openProject(openProjectPath.get(0));
 
     }
 
+    /**
+     * Deletes a directory.
+     *
+     * @param path The Path to the directory.
+     */
     public static void deleteDirectory(Path path) {
 
+        // Ask user to confirm.
         boolean confirm = MainUtility.confirm("Delete " + path.getFileName(), "This directory and all contents will be deleted!");
         if (confirm) {
             File dir = new File(path.toString());
@@ -326,70 +460,92 @@ public class DirectoryManager {
                 logger.error(e);
             }
         }
-        ProjectManager.openProject(openProjectPath.get(0));
 
     }
 
+    /**
+     * Cuts a directory.
+     *
+     * @param path The Path to the directory.
+     */
     public static void cutDirectory(Path path) {
 
         FileManager.cutFile(path, true);
     }
 
+    /**
+     * Copies a directory.
+     *
+     * @param path The Path to the directory.
+     */
     public static void copyDirectory(Path path) {
 
         FileManager.copyFile(path);
     }
 
+    /**
+     * Pastes into a directory.
+     *
+     * @param path The Path to the directory.
+     */
     public static void pasteIntoDirectory(Path path) {
 
+        // Check if there is a String in the clipboard (A path).
         if (clipboard.hasString()) {
             String content = clipboard.getString();
             File potentialFile = new File(content);
+
+            // Check whether the string is indeed a legit path.
             if (!potentialFile.exists()) {
-                System.out.println("No file or directory copied!");
                 return;
             }
             File newFile = new File(path.toString(), potentialFile.getName());
             try {
-                if (newFile.exists()) {
-                    boolean confirm = MainUtility.confirm("File or directory already exists", "This file is already exists, overwriting it?");
-                    if (confirm) {
-                        if (shouldCut.get(0)) {
-                            Files.move(potentialFile.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                            logger.info("{} moved to {}", potentialFile.getName(), newFile.getName());
-                        } else {
-                            ArrayList<String> newContent = FileManager.readFile(potentialFile.toPath());
-                            if (newContent == null) {
-                                if (newFile.mkdir()) {
-                                    logger.info("{} created", newFile.getName());
-                                }
-                            } else {
-                                Files.write(newFile.toPath(), newContent);
-                                logger.info("{} created", newFile.getName());
-                            }
-
-                        }
-                    }
-                } else {
-                    Files.move(potentialFile.toPath(), newFile.toPath());
+                if (newFile.exists() &&
+                    !MainUtility.confirm("File or directory already exists", "This file is already exists, overwriting it?")) {
+                    return;
+                }
+                // Check whether it was a cut or copy.
+                if (shouldCut.get(0)) {
+                    Files.move(potentialFile.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                     logger.info("{} moved to {}", potentialFile.getName(), newFile.getName());
+                } else {
+                    ArrayList<String> newContent = FileManager.readFile(potentialFile.toPath());
+                    if (newContent == null) {
+                        if (newFile.mkdir()) {
+                            logger.info("{} created", newFile.getName());
+                        }
+                    } else {
+                        Files.write(newFile.toPath(), newContent);
+                        logger.info("{} created", newFile.getName());
+                    }
                 }
             } catch (IOException e) {
                 logger.error(e);
             }
-
         }
-        ProjectManager.openProject(openProjectPath.get(0));
 
     }
 
+    /**
+     * Renames a directory.
+     *
+     * @param path The Path to the directory.
+     */
     public static void renameDirectory(Path path) {
 
         FileManager.renameFile(path);
     }
 
+    /**
+     * Deletes a directory and all its contents.
+     *
+     * @param path The Path to the directory.
+     * @throws IOException IOException
+     */
     public static void recursiveDelete(Path path) throws IOException {
 
+        // Check it's indeed a directory.
         if (Files.isDirectory(path)) {
             try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(path)) {
                 for (Path item : directoryStream) {
@@ -401,33 +557,64 @@ public class DirectoryManager {
 
     }
 
+    /**
+     * Sets up the DirectoryChooser.
+     *
+     * @param directoryChooser The DirectoryChooser.
+     */
     public static void setDirectoryChooser(DirectoryChooser directoryChooser) {
 
         DirectoryManager.directoryChooser = directoryChooser;
     }
 
+    /**
+     * Sets up the TabPane.
+     *
+     * @param tabPane The TabPane.
+     */
     public static void setTabPane(TabPane tabPane) {
 
         DirectoryManager.tabPane = tabPane;
     }
 
+    /**
+     * Sets up OpenProjectPath.
+     *
+     * @param openProjectPath The OpenProjectPath.
+     */
     public static void setOpenProjectPath(ArrayList<Path> openProjectPath) {
 
         DirectoryManager.openProjectPath = openProjectPath;
     }
 
+    /**
+     * Sets up ProjectView.
+     *
+     * @param projectView The ProjectView.
+     */
     public static void setProjectView(VBox projectView) {
 
         DirectoryManager.projectView = projectView;
     }
 
+    /**
+     * Sets up the Clipboard.
+     *
+     * @param clipboard The Clipboard.
+     */
     public static void setClipboard(Clipboard clipboard) {
 
         DirectoryManager.clipboard = clipboard;
     }
 
+    /**
+     * Sets up ShouldCut.
+     *
+     * @param shouldCut The ShouldCut.
+     */
     public static void setShouldCut(ArrayList<Boolean> shouldCut) {
 
         DirectoryManager.shouldCut = shouldCut;
     }
+
 }

@@ -1,3 +1,20 @@
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.project.javaeditor;
 
 import com.project.custom_classes.OpenFile;
@@ -11,36 +28,44 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
 
+/**
+ * Handles UI related application setup.
+ */
 public class ApplicationView {
 
+    /**
+     * The logger for the class.
+     */
     private static final Logger logger = LogManager.getLogger(ApplicationView.class);
 
-    private final Stage stage;
-    private FXMLLoader fxmlLoader;
+    /**
+     * The primary stage.
+     */
+    private static Stage stage;
 
-    public ApplicationView(Stage stage) {
+    /**
+     * Sets up the application.
+     *
+     * @param application The Application instance.
+     * @return The controller.
+     */
+    public static Controller setUp(Class<Application> application) {
 
-        this.stage = stage;
-
-    }
-
-    public Controller setUp(ApplicationModel applicationModel, Class<Application> application) {
-
+        // Remove stage default decorations.
         stage.initStyle(StageStyle.UNDECORATED);
         try {
-            fxmlLoader = new FXMLLoader(application.getResource("fxml/editor.fxml"));
+            FXMLLoader fxmlLoader = new FXMLLoader(application.getResource("fxml/editor.fxml"));
             Parent root = fxmlLoader.load();
             Scene scene = new Scene(root, 1000, 600);
             scene.getStylesheets().add(Objects.requireNonNull(application.getResource("css/style.css")).toExternalForm());
             stage.setTitle("Fusion IDE");
             stage.setScene(scene);
             stage.setMaximized(true);
-            applicationModel.setUp(fxmlLoader);
+            ApplicationModel.setUp(fxmlLoader);
             return fxmlLoader.getController();
         } catch (IOException e) {
             logger.error(e);
@@ -49,7 +74,10 @@ public class ApplicationView {
 
     }
 
-    public void checkForUnsavedFiles() {
+    /**
+     * Check whether there are unsaved files.
+     */
+    public static void checkForUnsavedFiles() {
 
         ArrayList<OpenFile> unsavedFiles = OpenFilesTracker.getAllUnSaved();
         if (!unsavedFiles.isEmpty()) {
@@ -58,6 +86,16 @@ public class ApplicationView {
             }
         }
 
+    }
+
+    /**
+     * Sets the stage the class uses.
+     *
+     * @param stage The primary stage.
+     */
+    public static void setStage(Stage stage) {
+
+        ApplicationView.stage = stage;
     }
 
 }

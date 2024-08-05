@@ -1,105 +1,98 @@
-package com.project.utility;
+/*
+ * Copyright 2024 Alexis Mugisha
+ * https://github.com/CodingAddict1530
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.project.managers;
 
 import com.project.custom_classes.CustomTextArea;
 import com.project.custom_classes.OpenFilesTracker;
 import com.project.custom_classes.TextAreaChange;
 import com.project.custom_classes.diff_match_patch;
-import com.project.managers.JLSManager;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.geometry.Point2D;
-import javafx.scene.control.*;
+import javafx.scene.control.Tooltip;
+import javafx.scene.control.Tab;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextArea;
-import javafx.scene.input.*;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import com.project.managers.TextManager;
-import javafx.scene.text.Text;
-import org.eclipse.lsp4j.*;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.SignatureHelp;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.MarkedString;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.fxmisc.richtext.event.MouseOverTextEvent;
-import org.fxmisc.richtext.model.PlainTextChange;
-import org.fxmisc.richtext.model.TextChange;
-import org.fxmisc.undo.UndoManagerFactory;
-
-import java.awt.*;
-import java.lang.reflect.Array;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class EditAreaUtility {
+/**
+ * Handles Edit area operations.
+ */
+public class EditAreaManager {
 
+    /**
+     * A list of the keywords to be colored orange.
+     */
     public static final ArrayList<String> ORANGE_KEY_WORDS = new ArrayList<>(List.of(
-            "abstract",
-            "assert",
-            "boolean",
-            "break",
-            "byte",
-            "case",
-            "catch",
-            "char",
-            "class",
-            "const",
-            "continue",
-            "default",
-            "do",
-            "double",
-            "else",
-            "enum",
-            "extends",
-            "final",
-            "finally",
-            "float",
-            "for",
-            "goto",
-            "if",
-            "implements",
-            "import",
-            "instanceof",
-            "int",
-            "interface",
-            "long",
-            "native",
-            "new",
-            "null",
-            "package",
-            "private",
-            "protected",
-            "public",
-            "return",
-            "short",
-            "static",
-            "strictfp",
-            "super",
-            "switch",
-            "synchronized",
-            "this",
-            "throw",
-            "throws",
-            "transient",
-            "try",
-            "void",
-            "volatile",
-            "while",
-            "@interface"
+            "abstract", "assert", "boolean", "break", "byte", "case", "catch",
+            "char", "class", "const", "continue", "default", "do", "double", "else", "enum",
+            "extends", "final", "finally", "float", "for", "goto", "if", "implements",
+            "import", "instanceof", "int", "interface", "long", "native", "new", "null",
+            "package", "private", "protected", "public", "return", "short", "static",
+            "strictfp", "super", "switch", "synchronized", "this", "throw", "throws",
+            "transient", "try", "void", "volatile", "while", "@interface"
     ));
 
+    /**
+     * Button on footer displaying current line and character.
+     */
     private static Button goToBtn;
 
+    /**
+     * A list of non-alphanumeric completion trigger characters.
+     */
     private static final ArrayList<Character> completionTriggers = new ArrayList<>(List.of('.', '(', '"', '\'', ':', '@', '[', '{', ' '));
 
+    /**
+     * A list of signature help trigger characters.
+     */
     private static final ArrayList<Character> sHelpTriggers = new ArrayList<>(List.of('(', ','));
 
+    /**
+     * A tooltip to display hover messages.
+     */
     private static final Tooltip tooltip = new Tooltip();
     static {
         tooltip.setWrapText(true);
@@ -107,32 +100,73 @@ public class EditAreaUtility {
         tooltip.setMaxWidth(500);
     }
 
+    /**
+     * Stores the index of the focused item in the completion tooltip.
+     */
     public static int completionTooltipCurrentFocus = -1;
+
+    /**
+     * A tooltip to display completion prompts
+     */
     public static final Tooltip complitionTooltip = new Tooltip();
     static {
-        complitionTooltip.setOnHiding(event -> completionTooltipCurrentFocus = 0);
+        complitionTooltip.setOnHiding(event -> completionTooltipCurrentFocus = -1);
     }
 
+    /**
+     * Stores all mouse event, event handlers to have a reference to them.
+     */
     private static final ArrayList<EventHandler<MouseEvent>> mouseEvents = new ArrayList<>();
+
+    /**
+     * Stores the current version of each file (tab).
+     * Used by the language server.
+     */
     private static final Map<Tab, Integer> currentVersions = new HashMap<>();
 
+    /**
+     * Whether the operation is an undo.
+     */
     private static boolean isUndo = false;
+
+    /**
+     * Whether the operation is a redo.
+     */
     private static boolean isRedo = false;
 
-    public static void addEventHandler(CustomTextArea textArea, Tab tab) {
+    /**
+     * Adds event handlers to the CustomTextArea.
+     *
+     * @param textArea The TextArea.
+     * @param tab The tab containing it.
+     */
+    public static void addEventHandlers(CustomTextArea textArea, Tab tab) {
 
+        // Start keeping track of the version of the file.
         currentVersions.put(tab, 1);
+
+        // Remove default undo manager to allow the use of a custom one.
         textArea.setUndoManager(null);
+
+        // Listen for changes in the inner text of the CustomTextArea.
         textArea.getInnerTextArea().textProperty().addListener((observable, oldValue, newValue) -> {
 
-            if (!isRedo && !isUndo) {
-                while (textArea.popRedo() != null) {}
+            // If change wasn't cause by undo or redo, empty the redo stack (LinkedList).
+            if (!isRedo && !isUndo && textArea.popRedo() != null) {
+
+                // Use a different thread to avoid blocking JavaFX thread when the stack has
+                // a lot of entries.
+                new Thread(() -> {
+                    while (textArea.popRedo() != null) {
+                    }
+                }).start();
             }
-            if (isRedo) {
-                isUndo = false;
-            }
+
+            // Check whether it is an undo action. This will be ignored.
             if (!isUndo) {
                 diff_match_patch dmp = new diff_match_patch();
+
+                // Determine the changes.
                 LinkedList<diff_match_patch.Diff> diffs = dmp.diff_main(oldValue, newValue);
                 dmp.diff_cleanupSemantic(diffs);
                 int index = 0;
@@ -140,6 +174,8 @@ public class EditAreaUtility {
                     if (diff.operation == diff_match_patch.Operation.EQUAL) {
                         index = diff.text.length();
                     } else {
+
+                        // Push the changes onto the undo stack.
                         textArea.pushUndo(new TextAreaChange(diff.operation, diff.text, index));
                     }
 
@@ -148,46 +184,77 @@ public class EditAreaUtility {
                 isUndo = false;
             }
 
-            if (!Objects.equals(oldValue, newValue)) {
+            // Check whether the contents have changed effectively.
+            if (!oldValue.equals(newValue)) {
                 int size = mouseEvents.size();
+
+                // Empty mouseEvents.
                 for (int i = 0; i < size; i++) {
                     textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
                     mouseEvents.remove(0);
                 }
+
+                // Hide the completion tooltip if it is showing.
                 if (complitionTooltip.isShowing()) {
                     complitionTooltip.hide();
                 }
+
+                // Increment the version of the file.
                 currentVersions.replace(tab, currentVersions.get(tab) + 1);
+
+                // Notify the server that the file contents have changed.
                 JLSManager.didChange(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), newValue, currentVersions.get(tab));
+
+                // Start new thread to avoid blocking main thread during communication with server.
                 new Thread(() -> {
                     if (textArea.getCaretPosition() > 0) {
-                    List<CompletionItem> items = null;
-                    char currentChar = textArea.getInnerTextArea().getText().charAt(textArea.getInnerTextArea().getCaretPosition() - 1);
-                    if (sHelpTriggers.contains(currentChar)) {
-                        SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
-                    } else if (completionTriggers.contains(currentChar) || Character.isAlphabetic(currentChar)) {
-                        items = JLSManager.complete(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
-                    }
-                    if (items != null) {
-                        List<CompletionItem> finalItems = items;
-                        Platform.runLater(() -> {
-                            populateCompletionTooltip(finalItems, textArea);
-                            if (((GridPane) ((ScrollPane) EditAreaUtility.complitionTooltip.getGraphic()).getContent()).getChildren().isEmpty()) {
-                                return;
-                            }
-                            if (complitionTooltip.isShowing()) {
-                                complitionTooltip.hide();
-                            }
-                            textArea.getCaretBounds().ifPresent(bounds -> {
-                                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
-                                complitionTooltip.show(textArea, pos2D.getX(), pos2D.getY());
-                            });
-                        });
-                    }
+                        List<CompletionItem> items = null;
+                        char currentChar = textArea.getInnerTextArea().getText().charAt(textArea.getInnerTextArea().getCaretPosition() - 1);
 
-                }
+                        // Check whether the input character is a signature help trigger character.
+                        if (sHelpTriggers.contains(currentChar)) {
+
+                            // If so request signature help from server.
+                            SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
+                        } // Check whether the input character is a completion trigger character.
+                        else if (completionTriggers.contains(currentChar) || Character.isAlphabetic(currentChar)) {
+
+                            // If so request for completion from the server.
+                            items = JLSManager.complete(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
+                        }
+
+                        // Check whether an item was returned.
+                        if (items != null) {
+
+                            // Create a copy to use in the lambda.
+                            List<CompletionItem> finalItems = items;
+
+                            // Execute UI changes on the JavaFX Thread.
+                            Platform.runLater(() -> {
+
+                                if (complitionTooltip.isShowing()) {
+                                    complitionTooltip.hide();
+                                }
+                                // Add items to the completion tooltip.
+                                populateCompletionTooltip(finalItems, textArea);
+
+                                // If completion tooltip is still empty, carry no further action.
+                                if (((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent()).getChildren().isEmpty()) {
+                                    return;
+                                }
+
+                                // Show the tooltip.
+                                textArea.getCaretBounds().ifPresent(bounds -> {
+                                    Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                                    complitionTooltip.show(textArea, pos2D.getX(), pos2D.getY());
+                                });
+                            });
+                        }
+
+                    }
                 }).start();
 
+                // Check whether file was saved before, and mark it as unsaved.
                 if (Boolean.TRUE.equals(OpenFilesTracker.isSaved(tab))) {
                     OpenFilesTracker.getOpenFile(tab).setIsSaved(false);
                     HBox header = (HBox) tab.getGraphic();
@@ -199,57 +266,43 @@ public class EditAreaUtility {
                 }
             }
         });
+
+        // Listen for changes in the position of the caret of the inner TextArea.
         textArea.getInnerTextArea().caretPositionProperty().addListener((observable, oldValue, newValue) -> {
+
+            // Adjust what goTo displays
             int line = getPosition(textArea, textArea.getCaretPosition()).getLine();
             int character = getPosition(textArea, textArea.getCaretPosition()).getCharacter();
             goToBtn.setText(String.format("%d:%d", line + 1, character));
+
         });
+
+        // Set a hover to be determined by the mouse stopping for 300 milliseconds.
         textArea.setMouseOverTextDelay(Duration.ofMillis(300));
+
+        // Listen for when the mouse starts to hover.
         textArea.addEventHandler(MouseOverTextEvent.MOUSE_OVER_TEXT_BEGIN, event -> {
+
             int index = event.getCharacterIndex();
             if (index > 0 && index < textArea.getLength()) {
+
+                // Run on new thread to avoid blocking the main thread during server interactions.
                 new Thread(() -> {
+
+                    // Request for a Hover object from the server.
                     Hover hoverResult = JLSManager.getHover(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, index));
+
+                    // Check for content in the hover object.
                     if (hoverResult != null) {
                         if (hoverResult.getContents() != null) {
                             if (hoverResult.getContents().getRight() != null) {
-                                Platform.runLater(() -> {
-                                    tooltip.setText(hoverResult.getContents().getRight().getValue());
-                                    if (tooltip.getText().isEmpty()) {
-                                        return;
-                                    }
-                                    Tooltip.install(textArea, tooltip);
-                                    textArea.getCaretBounds().ifPresent(bounds -> {
-                                        Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
-                                        tooltip.show(textArea, pos2D.getX(), pos2D.getY());
-                                    });
-                                });
+                                displayHoverResult(hoverResult.getContents().getRight().getValue(), textArea);
                             } else if (hoverResult.getContents().getLeft() != null) {
                                 for (Either<String, MarkedString> obj : hoverResult.getContents().getLeft()) {
                                     if (obj.getRight() != null) {
-                                        Platform.runLater(() -> {
-                                            tooltip.setText(obj.getRight().getValue());
-                                            if (tooltip.getText().isEmpty()) {
-                                                return;
-                                            }
-                                            Tooltip.install(textArea, tooltip);
-                                            textArea.getCaretBounds().ifPresent(bounds -> {
-                                                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
-                                                tooltip.show(textArea, pos2D.getX(), pos2D.getY());
-                                            });
-                                        });
+                                        displayHoverResult(obj.getRight().getValue(), textArea);
                                     } else if (obj.getLeft() != null) {
-                                        Platform.runLater(() -> {
-                                            tooltip.setText(obj.getLeft());
-                                            if (tooltip.getText().isEmpty()) {
-                                                return;
-                                            }
-                                            Tooltip.install(textArea, tooltip);
-                                            textArea.getCaretBounds().ifPresent(bounds -> {
-                                                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
-                                                tooltip.show(textArea, pos2D.getX(), pos2D.getY());
-                                            });
-                                        });
+                                        displayHoverResult(obj.getLeft(), textArea);
                                     }
                                 }
                             }
@@ -257,45 +310,69 @@ public class EditAreaUtility {
                     }
                 }).start();
             }
+
         });
+
+        // Listen for when the mouse stops hovering.
         textArea.addEventHandler(MouseOverTextEvent.MOUSE_OVER_TEXT_END, event -> {
+
             tooltip.hide();
             Tooltip.uninstall(textArea, tooltip);
+
         });
+
+        // Listen for a mouse click.
         textArea.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
+
+            // Hide the completion tooltip.
             if (complitionTooltip.isShowing()) {
                 complitionTooltip.hide();
             }
+
         });
+
     }
 
-    public static void undo(CustomTextArea textArea, boolean undo) {
+    /**
+     * Undoes or redoes the previous action.
+     *
+     * @param textArea The CustomTextArea.
+     * @param undo whether it is an undo or redo
+     */
+    public static void undoOrRedo(CustomTextArea textArea, boolean undo) {
 
-        TextAreaChange previous;
-        previous = (undo) ? textArea.popUndo() : textArea.popRedo();
+        TextAreaChange previous = (undo) ? textArea.popUndo() : textArea.popRedo();
         if (previous != null) {
+
+            // Check whether data was added to the TextArea.
             if (previous.operation() == diff_match_patch.Operation.INSERT) {
                 if (undo) {
                     isUndo = true;
-                    textArea.pushRedo(new TextAreaChange(diff_match_patch.Operation.DELETE, previous.text(), previous.newPosition()));
+
+                    // If it is an undo, push it onto the redo stack.
+                    textArea.pushRedo(new TextAreaChange(diff_match_patch.Operation.DELETE, previous.text(), previous.position()));
                 } else {
                     isRedo = true;
                 }
+
+                // Remove the text that was added.
                 textArea.replaceText(
-                        previous.newPosition(),
-                        previous.newPosition() + previous.text().length(),
+                        previous.position(),
+                        previous.position() + previous.text().length(),
                         ""
                 );
             } else {
                 if (undo) {
                     isUndo = true;
-                    textArea.pushRedo(new TextAreaChange(diff_match_patch.Operation.INSERT, previous.text(), previous.newPosition()));
+                    textArea.pushRedo(new TextAreaChange(diff_match_patch.Operation.INSERT, previous.text(), previous.position()));
                 } else {
                     isRedo = true;
                 }
+
+                // Add back the text that was removed.
                 textArea.replaceText(
-                        previous.newPosition(),
-                        previous.newPosition(),
+                        previous.position(),
+                        previous.position(),
                         previous.text()
                 );
             }
@@ -303,8 +380,16 @@ public class EditAreaUtility {
 
     }
 
+    /**
+     * Returns the position of the caret as a Position object.
+     *
+     * @param textArea The CustomTextArea.
+     * @param index The index of the caret.
+     * @return The Position.
+     */
     private static org.eclipse.lsp4j.Position getPosition(CustomTextArea textArea, Integer index) {
 
+        // Use the text in the inner TextArea.
         String text = textArea.getInnerTextArea().getText();
         int lineCount = 0;
         int charCount = 0;
@@ -322,6 +407,12 @@ public class EditAreaUtility {
         return new org.eclipse.lsp4j.Position(lineCount, charCount);
     }
 
+    /**
+     * Adds completion data to the completion Tooltip.
+     *
+     * @param items The completion items.
+     * @param textArea The CustomTextArea.
+     */
     private static void populateCompletionTooltip(List<CompletionItem> items, CustomTextArea textArea) {
 
         GridPane gridPane = new GridPane();
@@ -329,10 +420,19 @@ public class EditAreaUtility {
         for (int i = 0; i < items.size(); i++) {
             Label lineLabel = new Label(items.get(i).getLabel());
             lineLabel.setStyle("-fx-padding: 6px;-fx-font-size: 12px");
+
+            // A copy of i to use in the lambda.
+            int finalI = i;
+
+            // Listen for clicks on the items in the Tooltip.
             lineLabel.setOnMouseClicked(event -> {
+
+                // Single click focuses the item.
                 if (event.getClickCount() == 1) {
                     lineLabel.getStyleClass().add("label-focused");
-                } else if (event.getClickCount() == 2) {
+                    completionTooltipCurrentFocus = finalI;
+                } // Double click fires the tab key (This autocompletes with the selected item).
+                else if (event.getClickCount() == 2) {
                     KeyEvent tabKeyEvent = new KeyEvent(KeyEvent.KEY_PRESSED,
                             KeyCode.TAB.getChar(),
                             KeyCode.TAB.getChar(),
@@ -346,6 +446,7 @@ public class EditAreaUtility {
                 }
             });
             gridPane.add(lineLabel, 0, i);
+
         }
 
         ScrollPane scrollPane = new ScrollPane(gridPane);
@@ -361,13 +462,24 @@ public class EditAreaUtility {
 
     }
 
+    /**
+     * Colors the CustomTextArea.
+     *
+     * @param textArea The CustomTextArea.
+     */
     public static void color(CustomTextArea textArea) {
+
         String line = textArea.getInnerTextArea().getText();
 
+        // Javadoc comments in green.
         line = matchAndColor(line, textArea, "/\\*.*?\\*/",
                 "green", true, true);
+
+        // Normal comments in grey.
         line = matchAndColor(line, textArea, "(//[^\\n]*)",
                 "grey", false, false);
+
+        // Strings and chars in green.
         line = matchAndColor(line, textArea, "\"([^\"]*)\"",
                 "green", true, true);
 
@@ -392,21 +504,34 @@ public class EditAreaUtility {
                     break;
                 }
                 if (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000') {
-                    //decrement = true;
                     break;
                 }
                 index++;
             }
             endIndex = index;
+
+            // If it is a keyword, color it orange (#FF9D00).
             if (ORANGE_KEY_WORDS.contains(line.substring(startIndex, endIndex))) {
                 colorThis(textArea, "FF9D00", new int[] { startIndex, endIndex });
-            } else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
+            } // Otherwise color it white.
+            else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
                 colorThis(textArea, "white", new int[] { startIndex, endIndex });
             }
         }
 
     }
 
+    /**
+     * Check if the line matches the regex pattern and color it.
+     *
+     * @param line The line to be checked.
+     * @param textArea The CustomTextArea.
+     * @param regex The regex pattern.
+     * @param color The color to apply.
+     * @param dotAll Whether to enable dotAll mode or not. Dot mode will match any character, even '\n'.
+     * @param boundaries Whether to color the boundaries as well.
+     * @return The formatted string.
+     */
     private static String matchAndColor(String line, CustomTextArea textArea, String regex,
                                 String color, boolean dotAll, boolean boundaries) {
         Pattern pattern;
@@ -438,12 +563,24 @@ public class EditAreaUtility {
         return modifiedLine.toString();
     }
 
+    /**
+     * Colors a part of the text in the CustomTextArea.
+     *
+     * @param textArea The CustomTextArea.
+     * @param color The color to apply
+     * @param word Store beginning and end indexes of the word.
+     */
     private static void colorThis(CustomTextArea textArea, String color, int[] word) {
 
         textArea.setStyle(word[0], word[1], "-fx-fill: " + color + ";");
-
     }
 
+    /**
+     * Generates a context menu for right clicks.
+     *
+     * @param menus Indefinite number of arrays of context menus and a number defining their action.
+     * @return The ContextMenu.
+     */
     public static ContextMenu getContextMenu(Object[]... menus) {
 
         ContextMenu contextMenu = new ContextMenu();
@@ -467,20 +604,38 @@ public class EditAreaUtility {
 
     }
 
+    /**
+     * Adds an accelerator to the menuItem.
+     * Assumes the key will be pressed while holding Control.
+     *
+     * @param menuItem The MenuItem.
+     * @param keyCode The KeyCode.
+     */
     public static void addAccelerator(MenuItem menuItem, KeyCode keyCode) {
 
         KeyCombination newComb = new KeyCodeCombination(keyCode, KeyCombination.CONTROL_DOWN);
         menuItem.setAccelerator(newComb);
-
     }
 
+    /**
+     * Adds an accelerator to the menuItem.
+     *
+     * @param menuItem The MenuItem.
+     * @param keyCode The KeyCode.
+     * @param modifier An indefinite list of modifiers.
+     */
     public static void addAccelerator(MenuItem menuItem, KeyCode keyCode, KeyCombination.Modifier... modifier) {
 
         KeyCombination newComb = new KeyCodeCombination(keyCode, modifier);
         menuItem.setAccelerator(newComb);
-
     }
 
+    /**
+     * Processes a diagnostic from the server (Errors in the file).
+     *
+     * @param diagnostic The Diagnostic.
+     * @param file The Path to the file.
+     */
     public static void processDiagnostic(Diagnostic diagnostic, Path file) {
 
         int startLine = diagnostic.getRange().getStart().getLine();
@@ -489,6 +644,9 @@ public class EditAreaUtility {
         int endChar = diagnostic.getRange().getEnd().getCharacter();
 
         Tab tab = null;
+
+        // A diagnostic referencing files used by the server will cause NullPointerException.
+        // This typically leaves tab null.
         try {
             tab = OpenFilesTracker.getOpenFile(file).getTab();
         } catch (NullPointerException ignored) {}
@@ -497,12 +655,15 @@ public class EditAreaUtility {
             return;
         }
 
+        // Empty mouseEvents.
         int size = mouseEvents.size();
         CustomTextArea textArea = (CustomTextArea) tab.getContent();
         for (int i = 0; i < size; i++) {
             textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
             mouseEvents.remove(0);
         }
+
+        // Recolor the TextArea to avoid previous formats from interfering.
         color(textArea);
 
         int start = 0;
@@ -539,6 +700,7 @@ public class EditAreaUtility {
 
         }
 
+        // Style the specified length in text with errors. Make it red.
         for (int i = start; i < end; i++) {
             String currentStyle = textArea.getStyleOfChar(i);
             textArea.setStyle(i + 1, i + 2, currentStyle + " -fx-fill: red;");
@@ -567,8 +729,37 @@ public class EditAreaUtility {
 
     }
 
+    /**
+     * Sets up goToBtn.
+     *
+     * @param goToBtn goToBtn.
+     */
     public static void setGoTo(Button goToBtn) {
 
-        EditAreaUtility.goToBtn = goToBtn;
+        EditAreaManager.goToBtn = goToBtn;
     }
+
+    /**
+     * Displays the results of a hover request.
+     *
+     * @param text The text.
+     * @param textArea The CustomTextArea.
+     */
+    private static void displayHoverResult(String text, CustomTextArea textArea) {
+
+        // Updates being made to UI, so JavaFX thread is used.
+        Platform.runLater(() -> {
+            tooltip.setText(text);
+            if (tooltip.getText().isEmpty()) {
+                return;
+            }
+            Tooltip.install(textArea, tooltip);
+            textArea.getCaretBounds().ifPresent(bounds -> {
+                Point2D pos2D = new Point2D(bounds.getMaxX(), bounds.getMaxY());
+                tooltip.show(textArea, pos2D.getX(), pos2D.getY());
+            });
+        });
+
+    }
+
 }
