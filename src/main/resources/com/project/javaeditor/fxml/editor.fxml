@@ -5,6 +5,7 @@
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.SplitPane?>
 <?import javafx.scene.control.TabPane?>
 <?import javafx.scene.layout.HBox?>
@@ -58,15 +59,31 @@
             <HBox fx:id="padHBox" maxWidth="6.0" prefHeight="27.0" prefWidth="6.0" />
          </children>
       </HBox>
-      <SplitPane fx:id="verticalSplitPane" dividerPositions="0.5" orientation="VERTICAL" prefHeight="200.0" prefWidth="160.0" VBox.vgrow="ALWAYS">
+      <SplitPane fx:id="verticalSplitPane" dividerPositions="0.5" orientation="VERTICAL" VBox.vgrow="ALWAYS">
          <items>
-            <SplitPane fx:id="splitPane" dividerPositions="0.5" prefHeight="200.0" prefWidth="200.0">
+            <SplitPane fx:id="splitPane" dividerPositions="0.5">
                <items>
                   <VBox fx:id="projectView" alignment="TOP_RIGHT" prefHeight="341.0" prefWidth="126.0" />
                   <TabPane fx:id="tabPane" prefHeight="200.0" prefWidth="343.0" tabClosingPolicy="UNAVAILABLE" />
                </items>
             </SplitPane>
-            <HBox fx:id="console" prefWidth="200.0" />
+            <HBox fx:id="console">
+               <children>
+                  <SplitPane fx:id="consoleSplitPane" HBox.hgrow="ALWAYS">
+                     <items>
+                        <VBox>
+                           <children>
+                              <HBox fx:id="debugHeader" minHeight="20.0" prefHeight="27.0" />
+                              <ScrollPane fx:id="variableArea" VBox.vgrow="ALWAYS">
+                                 <content>
+                                    <VBox minHeight="200.0" minWidth="600.0" style="-fx-background-color: #424746;" />
+                                 </content>
+                              </ScrollPane>
+                           </children>
+                        </VBox>
+                     </items>
+                  </SplitPane>
+               </children></HBox>
          </items>
       </SplitPane>
       <HBox fx:id="footer" prefHeight="27.0" prefWidth="600.0">
