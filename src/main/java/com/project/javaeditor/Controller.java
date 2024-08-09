@@ -37,20 +37,10 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.TabPane;
-import javafx.scene.control.SplitPane;
-import javafx.scene.control.Tab;
-import javafx.scene.control.Button;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
-import javafx.scene.control.MenuBar;
-import javafx.scene.control.MenuItem;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.input.KeyCombination;
+import javafx.scene.input.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -60,6 +50,7 @@ import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
 import java.awt.Desktop;
 import java.io.File;
 import java.net.URI;
@@ -234,6 +225,24 @@ public class Controller implements Initializable {
     private Label filePath;
 
     /**
+     * Divides the variableArea and the consoleTextArea.
+     */
+    @FXML
+    private SplitPane consoleSplitPane;
+
+    /**
+     * Contains the buttons to control the debug session.
+     */
+    @FXML
+    private HBox debugHeader;
+
+    /**
+     * The Node that displays current variable values while debugging.
+     */
+    @FXML
+    private ScrollPane variableArea;
+
+    /**
      * The logger for the class.
      */
     private static final Logger logger = LogManager.getLogger(Controller.class);
@@ -274,6 +283,21 @@ public class Controller implements Initializable {
     private static SettingsResult settingsResult;
 
     /**
+     * The InlineCssTextArea used for the console.
+     */
+    private static ConsoleTextArea cTextArea;
+
+    /**
+     * A GradleWrapper to execute gradle tasks.
+     */
+    private static GradleWrapper gradleWrapper;
+
+    /**
+     * An Event Filter to hide call stack Tooltip.
+     */
+    private static EventHandler<MouseEvent> clickEF = null;
+
+    /**
      * Determines whether filePathThread should keep running.
      */
     private static final AtomicReference<Boolean> keepRunning = new AtomicReference<>(false);
@@ -292,6 +316,7 @@ public class Controller implements Initializable {
         setUpHeader();
         setUpFooter();
         setUpConsole();
+        setUpDebugArea();
         initializeManagers();
 
         // Add accelerators to menu items.
@@ -312,10 +337,14 @@ public class Controller implements Initializable {
         footer.setAlignment(Pos.CENTER);
         projectView.getStyleClass().add("tab-pane");
         splitPane.setDividerPositions(0.3);
-        verticalSplitPane.getStyleClass().add("vertical-split-pane");
+        verticalSplitPane.getStyleClass().add("vertical-split-pane1");
         verticalSplitPane.setDividerPositions(1);
 
+        debugHeader.setStyle("-fx-background-color: #424746");
+        variableArea.getStyleClass().add("variable-area");
         startFilePathThread();
+
+        MainUtility.installTooltip("Name of current project", projectName);
 
     }
 
@@ -483,32 +512,138 @@ public class Controller implements Initializable {
      */
     public void setUpConsole() {
 
-        ConsoleTextArea textArea = new ConsoleTextArea();
-        textArea.getStyleClass().add("inline-css-text-area-console");
+        cTextArea = new ConsoleTextArea();
+        cTextArea.getStyleClass().add("inline-css-text-area-console");
 
         // Style user input with color green.
-        textArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+        cTextArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
 
-            int caretPos = textArea.getCaretPosition();
+            int caretPos = cTextArea.getCaretPosition();
             String character = event.getCharacter();
             event.consume();
             if (!Objects.equals(character, "\b")) {
-                textArea.insertText(caretPos, character);
-                textArea.moveTo(caretPos + 1);
+                cTextArea.insertText(caretPos, character);
+                cTextArea.moveTo(caretPos + 1);
                 if (character.matches("\\S")) {
-                    textArea.setStyle(caretPos,
+                    cTextArea.setStyle(caretPos,
                             caretPos + 1, "-fx-fill: green;");
                 }
             }
         });
 
-        textArea.protectText();
-        textArea.setEditable(false);
-        console.setMaxHeight(0);
-
-        HBox.setHgrow(textArea, Priority.ALWAYS);
-        console.getChildren().add(textArea);
+        cTextArea.protectText();
+        cTextArea.setEditable(false);
+        HBox.setHgrow(cTextArea, Priority.ALWAYS);
+        console.getChildren().clear();
+        console.getChildren().add(cTextArea);
         logger.info("Console setup complete");
+
+    }
+
+    /**
+     * Sets up the Debug zone.
+     */
+    public void setUpDebugArea() {
+
+        ImageView callStackIcon = new ImageView(
+                new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/call-stack.png"))));
+        MainUtility.sizeImage(callStackIcon, 20, 20);
+        Button callStackBtn = new Button();
+        callStackBtn.getStyleClass().add("runOptionBtn");
+        callStackBtn.setGraphic(callStackIcon);
+
+        // Listen for when the button is clicked.
+        callStackBtn.setOnAction(event -> {
+            Tooltip callStack;
+
+            // Try getting the call stack from either of the executors.
+            if ((callStack = gradleWrapper.getCallStack()) != null || (callStack = JavaCodeExecutor.getCallStack()) != null) {
+                Tooltip finalCallStack = callStack;
+                finalCallStack.show(
+                        callStackBtn.getScene().getWindow(),
+                        callStackBtn.localToScreen(callStackBtn.getLayoutBounds().getMaxX(), callStackBtn.getLayoutBounds().getMinY()).getX(),
+                        callStackBtn.localToScreen(callStackBtn.getLayoutBounds().getMaxX(), callStackBtn.getLayoutBounds().getMinY()).getY()
+                );
+                clickEF = event2 -> {
+                    if (event2.getTarget() == callStackBtn) {
+                        return;
+                    }
+                    finalCallStack.hide();
+                    callStackBtn.getScene().removeEventFilter(MouseEvent.MOUSE_CLICKED, clickEF);
+                };
+                callStackBtn.getScene().addEventFilter(MouseEvent.MOUSE_CLICKED, clickEF);
+            }
+
+        });
+
+        // Install an informational tooltip.
+        MainUtility.installTooltip("Show Call Stack", callStackBtn);
+
+        ImageView stepIntoIcon = new ImageView(
+                new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/step-into.png"))));
+        MainUtility.sizeImage(stepIntoIcon, 20, 20);
+        Button stepIntoBtn = new Button();
+        stepIntoBtn.getStyleClass().add("runOptionBtn");
+        stepIntoBtn.setGraphic(stepIntoIcon);
+
+        // Listen for when the button is clicked.
+        stepIntoBtn.setOnAction(event -> {
+            gradleWrapper.notifyDebugger("step-into");
+            JavaCodeExecutor.notifyDebugger("step-into");
+        });
+
+        // Install an informational tooltip.
+        MainUtility.installTooltip("Step Into", stepIntoBtn);
+
+        ImageView stepOverIcon = new ImageView(
+                new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/step-over.png"))));
+        MainUtility.sizeImage(stepOverIcon, 20, 20);
+        Button stepOverBtn = new Button();
+        stepOverBtn.getStyleClass().add("runOptionBtn");
+        stepOverBtn.setGraphic(stepOverIcon);
+
+        // Listen for when the button is clicked.
+        stepOverBtn.setOnAction(event -> {
+            gradleWrapper.notifyDebugger("step-over");
+            JavaCodeExecutor.notifyDebugger("step-over");
+        });
+
+        // Install an informational tooltip.
+        MainUtility.installTooltip("Step Over", stepOverBtn);
+
+        ImageView stepOutIcon = new ImageView(
+                new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/step-out.png"))));
+        MainUtility.sizeImage(stepOutIcon, 20, 20);
+        Button stepOutBtn = new Button();
+        stepOutBtn.getStyleClass().add("runOptionBtn");
+        stepOutBtn.setGraphic(stepOutIcon);
+
+        // Listen for when the button is clicked.
+        stepOutBtn.setOnAction(event -> {
+            gradleWrapper.notifyDebugger("step-out");
+            JavaCodeExecutor.notifyDebugger("step-out");
+        });
+
+        // Install an informational tooltip.
+        MainUtility.installTooltip("Step Out", stepOutBtn);
+
+        ImageView continueIcon = new ImageView(
+                new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/play.png"))));
+        MainUtility.sizeImage(continueIcon, 20, 20);
+        Button continueBtn = new Button();
+        continueBtn.getStyleClass().add("runOptionBtn");
+        continueBtn.setGraphic(continueIcon);
+
+        // Listen for when the button is clicked.
+        continueBtn.setOnAction(event -> {
+            gradleWrapper.notifyDebugger("continue");
+            JavaCodeExecutor.notifyDebugger("continue");
+        });
+
+        // Install an informational tooltip.
+        MainUtility.installTooltip("Continue Execution", continueBtn);
+
+        debugHeader.getChildren().addAll(callStackBtn, stepOverBtn, stepIntoBtn, stepOutBtn, continueBtn);
 
     }
 
@@ -529,11 +664,30 @@ public class Controller implements Initializable {
     /**
      * Runs a file or the app.
      */
-    public void run() {
+    public void run(String command) {
+
+        // Adjust the console area depending on the task.
+        if (command.equals("debug")) {
+            console.getChildren().clear();
+            HBox hBox = new HBox();
+            hBox.getChildren().add(cTextArea);
+            console.getChildren().clear();
+            HBox.setHgrow(cTextArea, Priority.ALWAYS);
+            if (consoleSplitPane.getItems().size() > 1) {
+                consoleSplitPane.getItems().remove(1);
+            }
+            consoleSplitPane.getItems().add(hBox);
+            console.getChildren().add(consoleSplitPane);
+            consoleSplitPane.setDividerPositions(0.3);
+        } else {
+            console.getChildren().clear();
+            console.getChildren().add(cTextArea);
+        }
 
         // Display the Console.
         verticalSplitPane.setDividerPositions(0.7);
-        verticalSplitPane.getStyleClass().remove("vertical-split-pane");
+        verticalSplitPane.getStyleClass().remove("vertical-split-pane1");
+        verticalSplitPane.getStyleClass().add("vertical-split-pane2");
         console.setMaxHeight(HBox.USE_COMPUTED_SIZE);
 
         // Get current tab.
@@ -551,34 +705,42 @@ public class Controller implements Initializable {
         CustomFile file = OpenFilesTracker.getOpenFile(tab).getFile();
 
         // Unprotect the ConsoleTextArea to add text to it, then re-protect it.
-        ConsoleTextArea consoleTextArea = (ConsoleTextArea) console.getChildren().get(0);
-        consoleTextArea.setEditable(true);
-        consoleTextArea.unprotectText();
-        consoleTextArea.replaceText("");
-        consoleTextArea.protectText();
+        cTextArea.setEditable(true);
+        cTextArea.unprotectText();
+        cTextArea.replaceText("");
+        cTextArea.protectText();
 
         // Check if file is part of the current project.
         if (file.toPath().startsWith(ProjectManager.getCurrentProject().getPath())) {
 
             // If so use gradle.
-            GradleWrapper gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile()
-                    , consoleTextArea);
-            gradleWrapper.runBuild();
-            gradleWrapper.run(file.getPackageName());
+            gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile(),
+                    cTextArea);
+            gradleWrapper.setVariableArea(variableArea);
+            new Thread(() -> {
+                try {
+                    //gradleWrapper.runBuild().waitFor();
+                    gradleWrapper.run(file.getPackageName(), command);
+                } catch (Exception e) {
+                    logger.error(e);
+                }
+            }).start();
         } else {
 
             // Otherwise use the JavaCodeExecutor.
-            switch (JavaCodeExecutor.run(file, null)) {
-                case 1:
-                    logger.info("Couldn't read {} to execute", file.getPath());
-                    break;
-                case 2:
-                    logger.info("Compilation of {} failed", file.getPath());
-                    break;
-                case 3:
-                    logger.info("Couldn't delete .class file of {}", file.getPath());
-                    break;
-            }
+            new Thread(() -> {
+                switch (JavaCodeExecutor.run(file, null, command)) {
+                    case 1:
+                        logger.info("Couldn't read {} to execute", file.getPath());
+                        break;
+                    case 2:
+                        logger.info("Compilation of {} failed", file.getPath());
+                        break;
+                    case 3:
+                        logger.info("Couldn't delete .class file of {}", file.getPath());
+                        break;
+                }
+            }).start();
         }
 
     }
@@ -606,12 +768,14 @@ public class Controller implements Initializable {
         ProjectManager.setConsoleTextArea((ConsoleTextArea) console.getChildren().get(0));
         ProjectManager.setProjectName(projectName);
 
+
         SettingsUtility.setDirectoryChooser(directoryChooser);
         SettingsUtility.setTabPane(tabPane);
 
         MainUtility.setOpenProjectPath(openProjectPath);
 
         JavaCodeExecutor.setConsoleTextArea((ConsoleTextArea) console.getChildren().get(0));
+        JavaCodeExecutor.setVariableArea(variableArea);
 
     }
 
@@ -703,7 +867,12 @@ public class Controller implements Initializable {
             Button settingsBtn = new Button();
             settingsBtn.getStyleClass().add("runOptionBtn");
             settingsBtn.setGraphic(settingsIcon);
+
+            // Listen for when the button is clicked.
             settingsBtn.setOnAction(event -> showSettings());
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Settings", settingsBtn);
 
             settingsOptions.getChildren().add(settingsBtn);
 
@@ -713,7 +882,12 @@ public class Controller implements Initializable {
             Button runBtn = new Button();
             runBtn.getStyleClass().add("runOptionBtn");
             runBtn.setGraphic(runIcon);
-            runBtn.setOnAction(event -> run());
+
+            // Listen for when the button is clicked.
+            runBtn.setOnAction(event -> run("run"));
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Run", runBtn);
 
             ImageView debugIcon = new ImageView(
                     new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/debug.png"))));
@@ -721,7 +895,12 @@ public class Controller implements Initializable {
             Button debugBtn = new Button();
             debugBtn.getStyleClass().add("runOptionBtn");
             debugBtn.setGraphic(debugIcon);
-            debugBtn.setOnAction(event -> run());
+
+            // Listen for when the button is clicked.
+            debugBtn.setOnAction(event -> run("debug"));
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Debug", debugBtn);
 
             ImageView stopIcon = new ImageView(
                     new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/stop.png"))));
@@ -729,9 +908,50 @@ public class Controller implements Initializable {
             Button stopBtn = new Button();
             stopBtn.getStyleClass().add("runOptionBtn");
             stopBtn.setGraphic(stopIcon);
-            stopBtn.setOnAction(event -> run());
 
-            runOptions.getChildren().addAll(runBtn, debugBtn, stopBtn);
+            // Listen for when the button is clicked.
+            stopBtn.setOnAction(event -> {
+                JavaCodeExecutor.terminate();
+                gradleWrapper.terminate();
+            });
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Stop", stopBtn);
+
+            ImageView toggleConsoleIcon = new ImageView(
+                    new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/console.png"))));
+            MainUtility.sizeImage(toggleConsoleIcon, 20, 20);
+            Button toggleConsoleBtn = new Button();
+            toggleConsoleBtn.getStyleClass().add("runOptionBtn");
+            toggleConsoleBtn.setGraphic(toggleConsoleIcon);
+
+            // Listen for when the button is clicked.
+            toggleConsoleBtn.setOnAction(event -> {
+
+                // Adjust the visibility of the console.
+                if (verticalSplitPane.getStyleClass().contains("vertical-split-pane1")) {
+                    verticalSplitPane.getStyleClass().remove("vertical-split-pane1");
+                    verticalSplitPane.getStyleClass().add("vertical-split-pane2");
+                    verticalSplitPane.setDividerPositions(0.7);
+                    console.setMaxHeight(HBox.USE_COMPUTED_SIZE);
+                    if (console.getChildren().isEmpty()) {
+                        console.getChildren().add(consoleSplitPane);
+                    }
+                } else {
+                    verticalSplitPane.getStyleClass().remove("vertical-split-pane2");
+                    verticalSplitPane.getStyleClass().add("vertical-split-pane1");
+                    verticalSplitPane.setDividerPositions(1.0);
+                    console.setMaxHeight(0);
+                    if (console.getChildren().get(0) == consoleSplitPane) {
+                        console.getChildren().remove(0);
+                    }
+                }
+            });
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Toggle Console", toggleConsoleBtn);
+
+            runOptions.getChildren().addAll(runBtn, debugBtn, stopBtn, toggleConsoleBtn);
 
             Button btnClose = new Button();
             ImageView closeImage = new ImageView(new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/close.png"))));
@@ -756,6 +976,9 @@ public class Controller implements Initializable {
                 }
             });
 
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Close", btnClose);
+
             Button btnMinimize = new Button();
             ImageView minImage =new ImageView(new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/min.png"))));
             MainUtility.sizeImage(minImage, 10, 10);
@@ -764,6 +987,9 @@ public class Controller implements Initializable {
             btnMinimize.setStyle("-fx-background-color: #3CB542;");
             btnMinimize.setOnAction(event -> stage.setIconified(true));
 
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Minimize", btnMinimize);
+
             Button btnMaximize = new Button();
             ImageView maxImage = new ImageView(new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/max.png"))));
             MainUtility.sizeImage(maxImage, 10, 10);
@@ -771,6 +997,9 @@ public class Controller implements Initializable {
             btnMaximize.getStyleClass().add("topBarBtn");
             btnMaximize.setStyle("-fx-background-color: #B89C2E;");
             btnMaximize.setOnAction(event -> stage.setMaximized(!stage.isMaximized()));
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Maximize", btnMaximize);
 
             HBox spacing1 = new HBox();
             spacing1.setPrefWidth(5);
@@ -798,14 +1027,29 @@ public class Controller implements Initializable {
             filePath.setText(ProjectManager.APP_HOME.toPath().toFile().getName());
             Button goToBtn = new Button("433:33");
             goToBtn.getStyleClass().add("footerBtn");
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Go To", goToBtn);
             Button lineSeparatorBtn = new Button("LF");
             lineSeparatorBtn.getStyleClass().add("footerBtn");
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Line Separator", lineSeparatorBtn);
             Button charEncodingBtn = new Button("UTF-8");
             charEncodingBtn.getStyleClass().add("footerBtn");
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Character Encoding", charEncodingBtn);
             Button indentSpaceBtn = new Button("4 Spaces");
             indentSpaceBtn.getStyleClass().add("footerBtn");
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Number of indent spaces", indentSpaceBtn);
             Button readOnlyToggleBtn = new Button();
             readOnlyToggleBtn.getStyleClass().add("footerBtn");
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Toggle readonly", readOnlyToggleBtn);
             ImageView padlockIcon = new ImageView(
                     new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/padlock-open.png"))));
             MainUtility.sizeImage(padlockIcon, 15, 15);

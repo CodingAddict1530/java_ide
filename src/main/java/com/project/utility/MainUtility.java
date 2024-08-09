@@ -19,13 +19,16 @@ package com.project.utility;
 
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
+import com.project.managers.DirectoryManager;
 import com.project.managers.ProjectManager;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
+import javafx.scene.Node;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import com.project.managers.FileManager;
+import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.stage.Stage;
@@ -34,11 +37,17 @@ import javafx.util.Duration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Objects;
-import java.util.Optional;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
  * Main utility class for the application.
@@ -260,6 +269,115 @@ public class MainUtility {
     }
 
     /**
+     * Imports Java source files from the jdk installation.
+     */
+    public static void importSrcFiles() {
+
+        // Get the path to the jdk.
+        String jdkPath = SettingsUtility.getJavaPath();
+        if (jdkPath == null) {
+            return;
+        }
+
+        // Try to locate the zip containing the source files.
+        File src = new File(jdkPath, "lib/src.zip");
+        if (!src.exists()) {
+            src = new File(jdkPath, "src/src.zip");
+            if (!src.exists()) {
+                src = new File(jdkPath, "src.zip");
+                if (!src.exists()) {
+                    return;
+                }
+            }
+        }
+        Path destination = Paths.get("src/main/files/src");
+
+        // Extract the source files.
+        extractZip(src.toPath(), destination, false);
+
+    }
+
+    /**
+     * Extracts a zip file to a given location.
+     *
+     * @param zipFile The zip file.
+     * @param destination The destination directory.
+     * @param overwrite Whether to overwrite an existing one.
+     */
+    public static void extractZip(Path zipFile, Path destination, boolean overwrite) {
+
+        // Check if destination directory already exists.
+        if (Files.exists(destination)) {
+            if (overwrite) {
+                try {
+
+                    // Delete the directory and its contents.
+                    DirectoryManager.recursiveDelete(destination);
+                } catch (Exception e) {
+                    logger.error(e);
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+
+        // Create the destination directory.
+        if (destination.toFile().mkdir()) {
+            try (InputStream in = new FileInputStream(zipFile.toFile());
+                 ZipInputStream zin = new ZipInputStream(in)) {
+
+                ZipEntry entry;
+                while ((entry = zin.getNextEntry()) != null) {
+                    Path entryPath = destination.resolve(entry.getName());
+                    if (entry.isDirectory()) {
+                        Files.createDirectories(entryPath);
+                    } else {
+                        if (Files.notExists(entryPath.getParent())) {
+                            Files.createDirectories(entryPath.getParent());
+                        }
+                        try (OutputStream out = Files.newOutputStream(entryPath)) {
+
+                            // Oversized buffer for safety.
+                            byte[] buffer = new byte[10240];
+                            int bytesRead;
+                            while ((bytesRead = zin.read(buffer)) != -1) {
+                                out.write(buffer, 0, bytesRead);
+                            }
+                        }
+
+                        // Check what type of OS and set the files to readonly accordingly.
+                        if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+                            Files.setAttribute(entryPath, "dos:readonly", true);
+                        } else {
+                            Set<PosixFilePermission> perms = EnumSet.of(PosixFilePermission.OWNER_READ,
+                                    PosixFilePermission.GROUP_READ, PosixFilePermission.OTHERS_READ);
+                            Files.setPosixFilePermissions(entryPath, perms);
+                        }
+                    }
+                    zin.closeEntry();
+                }
+            } catch (Exception e) {
+                logger.error(e);
+            }
+        } else {
+            logger.error("{} directory could not be created", destination);
+        }
+
+    }
+
+    /**
+     * Installs a Tooltip onto a Node.
+     *
+     * @param text The text the Tooltip will contain.
+     * @param node The node to install on.
+     */
+    public static void installTooltip(String text, Node node) {
+
+        Tooltip.install(node, new Tooltip(text));
+    }
+
+    /**
      * Sizes an ImageView.
      *
      * @param image The ImageView.
@@ -272,6 +390,22 @@ public class MainUtility {
         image.setFitHeight(height);
         image.setPreserveRatio(true);
         image.setSmooth(true);
+
+    }
+
+    /**
+     * Requests for a port.
+     *
+     * @return The port number.
+     */
+    public static int getPort() {
+
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (Exception e) {
+            logger.error(e);
+            return -1;
+        }
 
     }
 

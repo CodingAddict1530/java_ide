@@ -17,10 +17,7 @@
 
 package com.project.managers;
 
-import com.project.custom_classes.OpenFile;
-import com.project.custom_classes.OpenFilesTracker;
-import com.project.custom_classes.CustomTextArea;
-import com.project.custom_classes.CustomFile;
+import com.project.custom_classes.*;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Tab;
@@ -47,7 +44,9 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.IntFunction;
 
 /**
@@ -79,6 +78,11 @@ public class FileManager {
      * Whether the operation is a cut or a copy.
      */
     private static ArrayList<Boolean> shouldCut;
+
+    /**
+     * A Map storing all breakpoints.
+     */
+    private static final Map<Label, BreakPoint> bpMap = new HashMap<>();
 
     /**
      * Creates a new tab.
@@ -134,7 +138,31 @@ public class FileManager {
             if (node instanceof Label label) {
                 label.setFont(Font.font("Roboto", FontWeight.BOLD, 13));
                 label.setAlignment(Pos.CENTER_RIGHT);
-                label.setStyle("-fx-padding: 0 5 0 0; -fx-background-color: #2d2e2e; -fx-text-fill: white");
+                label.setStyle("-fx-padding: 0 0 0 11; -fx-cursor: pointer;" +
+                        "-fx-text-fill: white; -fx-background-radius: 100%;");
+
+                // Listen for mouse clicks on the line numbers.
+                label.setOnMouseClicked(event -> {
+
+                    // Check whether there is already a breakpoint for that line.
+                    if (label.getStyleClass().contains("bp")) {
+
+                        // Remove the breakpoint.
+                        bpMap.remove(label);
+                        label.getStyleClass().remove("bp");
+                    } else {
+
+                        // Add a breakpoint.
+                        if (bpMap.containsKey(label)) {
+                            bpMap.replace(label, new BreakPoint(Integer.parseInt(label.getText().strip()),
+                                    OpenFilesTracker.getOpenFile(newTab).getFile().getPackageName()));
+                        } else {
+                            bpMap.put(label, new BreakPoint(Integer.parseInt(label.getText().strip()),
+                                    OpenFilesTracker.getOpenFile(newTab).getFile().getPackageName()));
+                        }
+                        label.getStyleClass().add("bp");
+                    }
+                });
             }
             return node;
         };
@@ -207,7 +235,9 @@ public class FileManager {
                 OpenFilesTracker.getOpenFile(tab).setIsSaved(true);
                 HBox header = (HBox) tab.getGraphic();
                 header.getChildren().remove(0);
-                header.getChildren().add(0, new Label(OpenFilesTracker.getOpenFile(tab).getFile().getName() + "     "));
+                Label headerLabel = new Label(OpenFilesTracker.getOpenFile(tab).getFile().getName() + "     ");
+                headerLabel.setStyle("-fx-text-fill: white");
+                header.getChildren().add(0, headerLabel);
             } else {
                 System.out.println("Error saving file");
             }
@@ -602,6 +632,10 @@ public class FileManager {
      */
     public static ArrayList<String> readFile(Path path) {
 
+        // Ensure the file exists.
+        if (!path.toFile().exists()) {
+            return null;
+        }
         try {
             List<String> lines = Files.readAllLines(path);
             ArrayList<String> returnValue = new ArrayList<>(lines);
@@ -627,7 +661,7 @@ public class FileManager {
 
         try {
             if (!overwrite) {
-                if (new File(path.toString()).exists()) {
+                if (new File(path.toString()).exists() && !append) {
                     return false;
                 }
             }
@@ -684,6 +718,16 @@ public class FileManager {
     public static void setShouldCut(ArrayList<Boolean> shouldCut) {
 
         FileManager.shouldCut = shouldCut;
+    }
+
+    /**
+     * Retrieves the bpMap.
+     *
+     * @return bpMap.
+     */
+    public static Map<Label, BreakPoint> getBpMap() {
+
+        return bpMap;
     }
 
 }

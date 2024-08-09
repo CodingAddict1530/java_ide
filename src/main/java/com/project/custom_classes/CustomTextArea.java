@@ -20,6 +20,7 @@ package com.project.custom_classes;
 import com.project.managers.EditAreaManager;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -61,6 +62,16 @@ public class CustomTextArea extends InlineCssTextArea {
     private final LinkedList<TextAreaChange> redoStack = new LinkedList<>();
 
     /**
+     * A tooltip to display completion prompts
+     */
+    private static final Tooltip complitionTooltip = EditAreaManager.getComplitionTooltip();
+
+    /**
+     * Stores the index of the focused item in the completion tooltip.
+     */
+    private static Integer completionTooltipCurrentFocus = EditAreaManager.getCompletionTooltipCurrentFocus();
+
+    /**
      * Instantiates a CustomTextArea object.
      *
      * @param isColored whether the TextArea will be formatted.
@@ -81,16 +92,16 @@ public class CustomTextArea extends InlineCssTextArea {
                     event.consume();
 
                     // If Tooltip is showing, tab will autocomplete.
-                    if (EditAreaManager.complitionTooltip.isShowing()) {
+                    if (complitionTooltip.isShowing()) {
 
                         // If value is less than 0, the user hasn't selected an option.
                         // Default is the first.
-                        if (EditAreaManager.completionTooltipCurrentFocus < 0) {
-                            EditAreaManager.completionTooltipCurrentFocus = 0;
+                        if (completionTooltipCurrentFocus < 0) {
+                            completionTooltipCurrentFocus = 0;
                         }
-                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent());
+                        GridPane gp = ((GridPane) ((ScrollPane) complitionTooltip.getGraphic()).getContent());
                         Label label = ((Label) gp.getChildren().get(
-                                EditAreaManager.completionTooltipCurrentFocus
+                                completionTooltipCurrentFocus
                         ));
 
                         // Delete any characters user had typed related to the word to autocomplete.
@@ -106,7 +117,7 @@ public class CustomTextArea extends InlineCssTextArea {
                         this.replaceText(this.getCaretPosition(), this.getCaretPosition(), label.getText().split(" ")[0]);
 
                         // Hide the Tooltip.
-                        EditAreaManager.complitionTooltip.hide();
+                        complitionTooltip.hide();
                         break;
                     }
 
@@ -132,38 +143,38 @@ public class CustomTextArea extends InlineCssTextArea {
                 case DOWN:
 
                     // If Tooltip is showing, down arrow will navigate the Tooltip.
-                    if (EditAreaManager.complitionTooltip.isShowing()) {
+                    if (complitionTooltip.isShowing()) {
 
                         // Prevent event from propagating any further.
                         event.consume();
 
-                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent());
-                        if (EditAreaManager.completionTooltipCurrentFocus >= gp.getChildren().size() - 1) {
-                            EditAreaManager.completionTooltipCurrentFocus = -1;
-                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(0);
+                        GridPane gp = ((GridPane) ((ScrollPane) complitionTooltip.getGraphic()).getContent());
+                        if (completionTooltipCurrentFocus >= gp.getChildren().size() - 1) {
+                            completionTooltipCurrentFocus = -1;
+                            ((ScrollPane) complitionTooltip.getGraphic()).setVvalue(0);
                         }
 
                         // Add "label-focused" style class to the current Label being focused.
                         // This styles it to show it is focused.
                         gp.getChildren().get(
-                                (EditAreaManager.completionTooltipCurrentFocus < 0) ?
-                                        gp.getChildren().size() - 1 : EditAreaManager.completionTooltipCurrentFocus
+                                (completionTooltipCurrentFocus < 0) ?
+                                        gp.getChildren().size() - 1 : completionTooltipCurrentFocus
                         ).getStyleClass().remove("label-focused");
 
                         // Remove the style from the previous Label.
                         gp.getChildren().get(
-                                ++EditAreaManager.completionTooltipCurrentFocus
+                                ++completionTooltipCurrentFocus
                         ).getStyleClass().add("label-focused");
 
                         // Scroll the Tooltip if needed.
-                        if (EditAreaManager.completionTooltipCurrentFocus % 10 == 0 && EditAreaManager.completionTooltipCurrentFocus != 0) {
+                        if (completionTooltipCurrentFocus % 10 == 0 && completionTooltipCurrentFocus != 0) {
                             double scrollAmount = 1.0 / ((gp.getChildren().size() % 10 != 0) ?
                                     (gp.getChildren().size() / 10) + 1 :
                                     (gp.getChildren().size() / 10));
-                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(
-                                    (((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() + scrollAmount > 1) ?
+                            ((ScrollPane) complitionTooltip.getGraphic()).setVvalue(
+                                    (((ScrollPane) complitionTooltip.getGraphic()).getVvalue() + scrollAmount > 1) ?
                                             1 :
-                                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() + scrollAmount
+                                            ((ScrollPane) complitionTooltip.getGraphic()).getVvalue() + scrollAmount
                             );
                         }
                     }
@@ -172,38 +183,38 @@ public class CustomTextArea extends InlineCssTextArea {
                 case UP:
 
                     // If Tooltip is showing, up arrow will navigate the Tooltip.
-                    if (EditAreaManager.complitionTooltip.isShowing()) {
+                    if (complitionTooltip.isShowing()) {
 
                         // Prevent event from propagating any further.
                         event.consume();
 
-                        GridPane gp = ((GridPane) ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getContent());
-                        if (EditAreaManager.completionTooltipCurrentFocus <=  0) {
-                            EditAreaManager.completionTooltipCurrentFocus = gp.getChildren().size();
-                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(1);
+                        GridPane gp = ((GridPane) ((ScrollPane) complitionTooltip.getGraphic()).getContent());
+                        if (completionTooltipCurrentFocus <=  0) {
+                            completionTooltipCurrentFocus = gp.getChildren().size();
+                            ((ScrollPane) complitionTooltip.getGraphic()).setVvalue(1);
                         }
 
                         // Add "label-focused" style class to the current Label being focused.
                         // This styles it to show it is focused.
                         gp.getChildren().get(
-                                (EditAreaManager.completionTooltipCurrentFocus >= gp.getChildren().size()) ?
-                                        0 : EditAreaManager.completionTooltipCurrentFocus
+                                (completionTooltipCurrentFocus >= gp.getChildren().size()) ?
+                                        0 : completionTooltipCurrentFocus
                         ).getStyleClass().remove("label-focused");
 
                         // Remove the style from the previous Label.
                         gp.getChildren().get(
-                                --EditAreaManager.completionTooltipCurrentFocus
+                                --completionTooltipCurrentFocus
                         ).getStyleClass().add("label-focused");
 
                         // Scroll Tooltip if needed.
-                        if (EditAreaManager.completionTooltipCurrentFocus % 10 == 0 && EditAreaManager.completionTooltipCurrentFocus != gp.getChildren().size() - 1) {
+                        if (completionTooltipCurrentFocus % 10 == 0 && completionTooltipCurrentFocus != gp.getChildren().size() - 1) {
                             double scrollAmount = 1.0 / ((gp.getChildren().size() % 10 != 0) ?
                                     (gp.getChildren().size() / 10) + 1 :
                                     (gp.getChildren().size() / 10));
-                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).setVvalue(
-                                    (((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() - scrollAmount < 0) ?
+                            ((ScrollPane) complitionTooltip.getGraphic()).setVvalue(
+                                    (((ScrollPane) complitionTooltip.getGraphic()).getVvalue() - scrollAmount < 0) ?
                                             0 :
-                                            ((ScrollPane) EditAreaManager.complitionTooltip.getGraphic()).getVvalue() - scrollAmount
+                                            ((ScrollPane) complitionTooltip.getGraphic()).getVvalue() - scrollAmount
                             );
                         }
                     }

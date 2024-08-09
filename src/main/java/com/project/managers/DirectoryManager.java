@@ -43,17 +43,9 @@ import org.apache.logging.log4j.Logger;
 import com.project.utility.MainUtility;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Files;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileVisitResult;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Handles directory related operations.
@@ -99,6 +91,11 @@ public class DirectoryManager {
      * Whether the operation is a cut or a copy.
      */
     private static ArrayList<Boolean> shouldCut;
+
+    /**
+     * The file used for caching classes that take time to locate.
+     */
+    private static final File CACHE = new File("/src/main/files/cache.fus");
 
     /**
      * Opens an existing project.
@@ -554,6 +551,67 @@ public class DirectoryManager {
             }
         }
         Files.delete(path);
+
+    }
+
+    /**
+     * Walks through a directories contents looking for a file.
+     *
+     * @param className The name of the class to look for.
+     * @param startDir The directory to start searching from.
+     * @return The file if any.
+     */
+    public static Optional<Path> findFile(String className, Path startDir) {
+
+
+        // Check if the file in not in the cache already.
+        ArrayList<String> cachedData =  FileManager.readFile(CACHE.toPath());
+        if (cachedData != null) {
+            for (String data : cachedData) {
+                if (data.split("\u001F")[1].endsWith(className + ".java")) {
+                    return Optional.of(Paths.get(data.split("\u001F")[0]));
+                }
+            }
+        }
+        long startTime = 0;
+        long endTime = 0;
+        if (startDir == null) {
+            startDir = Paths.get(ProjectManager.getCurrentProject().getPath() + "/src/main/java");
+        }
+
+        // final array to be able to use it in a lambda.
+        final Optional<Path>[] foundFile = new Optional[1];
+        try {
+            startTime = System.currentTimeMillis();
+            Files.walkFileTree(startDir, new SimpleFileVisitor<>() {
+
+                @Override
+                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs) {
+
+                    if (filePath.getFileName().toString().endsWith(className + ".java")) {
+                        foundFile[0] = Optional.of(filePath);
+                        return FileVisitResult.TERMINATE; // Stop searching once the file is found
+                    }
+                    return FileVisitResult.CONTINUE;
+
+                }
+
+            });
+            endTime = System.currentTimeMillis();
+        } catch (IOException | SecurityException e) {
+            logger.error(e);
+        }
+
+        // Check whether the search time exceeded the threshold.
+        if (endTime - startTime > 100) {
+            if (foundFile[0].isPresent()) {
+
+                // Store the path to the file and the name.
+                // Using delimiter '\u001F' since it is very uncommon (Not even a printable character).
+                FileManager.writeToFile(CACHE.toPath(), foundFile[0].get() + "\u001F" + className, false, true);
+            }
+        }
+        return foundFile[0];
 
     }
 

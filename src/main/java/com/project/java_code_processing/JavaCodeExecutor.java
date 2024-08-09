@@ -20,6 +20,10 @@ package com.project.java_code_processing;
 import com.project.custom_classes.ConsoleTextArea;
 import com.project.custom_classes.RootTreeNode;
 import com.project.managers.FileManager;
+import com.project.utility.MainUtility;
+import javafx.application.Platform;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tooltip;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import javax.tools.JavaCompiler;
@@ -70,13 +74,28 @@ public class JavaCodeExecutor {
     private static ConsoleTextArea consoleTextArea;
 
     /**
+     * The Node that displays current variable values while debugging.
+     */
+    private static ScrollPane variableArea;
+
+    /**
+     * An Object used for Synchronization.
+     */
+    private static final Object monitor = new Object();
+
+    /**
+     * The Debugger.
+     */
+    private static Debugger debugger;
+
+    /**
      * Compiles and executes a java file.
      *
      * @param file The file to be executed.
      * @param project The project the file belongs to.
      * @return 1 if it couldn't read the file, 2 due to a compilation error, 3 if it couldn't delete the .class file, otherwise 0.
      */
-    public static int run(File file, RootTreeNode project) {
+    public static int run(File file, RootTreeNode project, String command) {
 
         logger.info("Running {}", file.getAbsolutePath());
 
@@ -118,7 +137,7 @@ public class JavaCodeExecutor {
 
             });
             logger.info("Console input handling setup complete");
-            switch (execute(file, consoleTextArea, buildPath)) {
+            switch (execute(file, consoleTextArea, buildPath, command)) {
                 case 0:
                     logger.info("Execution successful");
                     break;
@@ -147,9 +166,13 @@ public class JavaCodeExecutor {
      * @param file The actual file.
      * @param textArea The ConsoleTextArea.
      * @param buildPath The build path.
-     * @return 1 if file is in a project but not in src directory, 2 if .class file couldn't be deleted, otherwise 0.
+     * @return 1 if file is in a project but not in src directory,
+     * 2 if .class file couldn't be deleted,
+     * 3 for unknown command,
+     * 4 if JVM cant be found on designated port number for debugging,
+     * otherwise 0.
      */
-    private static int execute(File file, ConsoleTextArea textArea, Path buildPath) {
+    private static int execute(File file, ConsoleTextArea textArea, Path buildPath, String command) {
 
         String[] parts1 = file.getName().split("\\.");
         String[] parts2 = file.getPath().split("\\\\");
@@ -173,31 +196,61 @@ public class JavaCodeExecutor {
             filePath.append(part).append(".");
         }
 
+        // final one item array to be able to use it in a lambda.
         final int[] returnValue = {0};
-        ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp",
-                ".", (filePath.isEmpty()) ? parts1[0] : filePath + parts1[0]);
+
+        // Get a port.
+        int port = MainUtility.getPort();
+        ProcessBuilder processBuilder;
+        if (command.equals("run")) {
+            processBuilder = new ProcessBuilder("java", "-cp",
+                    ".", (filePath.isEmpty()) ? parts1[0] : filePath + parts1[0]);
+        } else if (command.equals("debug")) {
+            processBuilder = new ProcessBuilder("java",
+                    "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:" + port, "-cp",
+                    ".", (filePath.isEmpty()) ? parts1[0] : filePath + parts1[0]);
+        } else {
+            return 3;
+        }
         processBuilder.directory((buildPath == null) ? new File("src/classes") :
                 buildPath.toFile());
-
-        // Redirect errors to output.
-        processBuilder.redirectErrorStream(true);
 
         try {
             process = processBuilder.start();
             bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
+            // Check if it is a debug session.
+            if (command.equals("debug")) {
+
+                // Wait for signal that jvm is ready.
+                synchronized (monitor) {
+                    monitor.wait(15000);
+                }
+
+                // Create a debugger and run it.
+                debugger = new Debugger(port,variableArea);
+                debugger.run();
+            }
+
             // Thread to read output to textArea
             Thread outputThread = new Thread(() -> {
 
                 try (InputStream inputStream = process.getInputStream();
-                     BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream))) {
+                     InputStream errorStream = process.getErrorStream();
+                     BufferedReader oBufferedReader = new BufferedReader(new InputStreamReader(inputStream));
+                     BufferedReader eBufferedReader = new BufferedReader(new InputStreamReader(errorStream))) {
 
                     String line;
-                    while ((line = bufferedReader.readLine()) != null) {
+                    while ((line = oBufferedReader.readLine()) != null) {
 
                         // Update TextArea on JavaFX Application Thread
                         String finalLine = line;
                         javafx.application.Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "black"));
+                    }
+                    while ((line = eBufferedReader.readLine()) != null) {
+                        // Update TextArea on JavaFX Application Thread
+                        String finalLine = line;
+                        Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "red"));
                     }
                 } catch (IOException e) {
                     logger.error(e);
@@ -212,6 +265,9 @@ public class JavaCodeExecutor {
 
                 try {
                     int exitCode = process.waitFor();
+                    if (debugger != null && debugger.hasFinished()) {
+                        debugger = null;
+                    }
                     outputThread.join();
                     javafx.application.Platform.runLater(() -> textArea.appendText("\nProcess Finished with exit code " + exitCode + "\n"));
                     if (buildPath == null) {
@@ -368,6 +424,65 @@ public class JavaCodeExecutor {
     public static void setConsoleTextArea(ConsoleTextArea consoleTextArea) {
 
         JavaCodeExecutor.consoleTextArea = consoleTextArea;
+    }
+
+    /**
+     * Terminates the process.
+     */
+    public static void terminate() {
+
+        if (process != null && process.isAlive()) {
+            process.destroy();
+            Platform.runLater(() -> {
+                try {
+                    consoleTextArea.appendText("\nProcess Finished with exit code " + process.waitFor() + "\n");
+                } catch (Exception e) {
+                    logger.error(e);
+                }
+            });
+        }
+
+    }
+
+    /**
+     * Sets up variableArea.
+     *
+     * @param variableArea variableArea.
+     */
+    public static void setVariableArea(ScrollPane variableArea) {
+
+        JavaCodeExecutor.variableArea = variableArea;
+    }
+
+    /**
+     * Sends a notification to the Debugger.
+     * Could be a step event or a continue notification.
+     *
+     * @param notification The notification.
+     */
+    public static void notifyDebugger(String notification) {
+
+        if (debugger == null) {
+            return;
+        }
+        debugger.getNotification(notification);
+
+    }
+
+    /**
+     * Retrieves the call stack from the Debugger.
+     *
+     * @return A Tooltip with the call stack.
+     */
+    public static Tooltip getCallStack() {
+
+        try {
+            return debugger.getCallStack();
+        } catch (Exception e) {
+            logger.error(e);
+            return null;
+        }
+
     }
 
 }

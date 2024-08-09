@@ -156,13 +156,25 @@ public class ProjectManager {
                         "tasks.test {",
                         "\tuseJUnitPlatform()",
                         "}\n",
-                        "task run(type: JavaExec) {",
+                        "tasks.register('run', JavaExec) {",
                         "\tif (project.hasProperty('mainClass')) {",
-                        "\t\tmain = project.mainClass",
+                        "\t\tmainClass = project.mainClass",
                         "\t} else {",
-                        "\t\tmain = 'Main'",
+                        "\t\tmainClass = 'Main'",
                         "\t}",
                         "\tclasspath = sourceSets.main.runtimeClasspath",
+                        "}\n",
+                        "tasks.register('debug', JavaExec) {",
+                        "\tif (project.hasProperty('mainClass')) {",
+                        "\t\tmainClass = project.mainClass",
+                        "\t} else {",
+                        "\t\tmainClass = 'Main'",
+                        "\t}",
+                        "\tclasspath = sourceSets.main.runtimeClasspath",
+                        "def port = project.hasProperty('port') ? project.port : '5006'",
+                        "\tjvmArgs = [",
+                        "\t\t'-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:${port}'",
+                        "\t]",
                         "}"
                 ));
             } catch (Exception e) {
@@ -178,6 +190,7 @@ public class ProjectManager {
                     logger.error("Failed to create {}", file);
                 }
             }
+            gradleWrapper.runBuild();
             System.out.println("Project build done");
 
         });

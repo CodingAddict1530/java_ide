@@ -17,10 +17,10 @@
 
 package com.project.managers;
 
-import com.project.custom_classes.CustomTextArea;
-import com.project.custom_classes.OpenFilesTracker;
-import com.project.custom_classes.TextAreaChange;
-import com.project.custom_classes.diff_match_patch;
+import com.project.custom_classes.*;
+import com.project.gradle.GradleWrapper;
+import com.project.utility.SettingsUtility;
+import com.sun.jdi.Location;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -40,6 +40,8 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.SignatureHelp;
 import org.eclipse.lsp4j.Hover;
@@ -47,13 +49,13 @@ import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.MarkedString;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.fxmisc.richtext.event.MouseOverTextEvent;
+
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,6 +76,11 @@ public class EditAreaManager {
             "strictfp", "super", "switch", "synchronized", "this", "throw", "throws",
             "transient", "try", "void", "volatile", "while", "@interface"
     ));
+
+    /**
+     * The logger for the class.
+     */
+    private static final Logger logger = LogManager.getLogger(GradleWrapper.class);
 
     /**
      * Button on footer displaying current line and character.
@@ -103,12 +110,12 @@ public class EditAreaManager {
     /**
      * Stores the index of the focused item in the completion tooltip.
      */
-    public static int completionTooltipCurrentFocus = -1;
+    private static Integer completionTooltipCurrentFocus = -1;
 
     /**
      * A tooltip to display completion prompts
      */
-    public static final Tooltip complitionTooltip = new Tooltip();
+    private static final Tooltip complitionTooltip = new Tooltip();
     static {
         complitionTooltip.setOnHiding(event -> completionTooltipCurrentFocus = -1);
     }
@@ -466,57 +473,99 @@ public class EditAreaManager {
      * Colors the CustomTextArea.
      *
      * @param textArea The CustomTextArea.
+     * @return The Thread.
      */
-    public static void color(CustomTextArea textArea) {
+    public static Thread color(CustomTextArea textArea) {
 
-        String line = textArea.getInnerTextArea().getText();
+        // Run on different thread since the operation might block the main thread.
+        Thread t = new Thread(() -> {
+            String line = textArea.getInnerTextArea().getText();
 
-        // Javadoc comments in green.
-        line = matchAndColor(line, textArea, "/\\*.*?\\*/",
-                "green", true, true);
+            // Javadoc comments in green.
+            line = matchAndColor(line, textArea, "/\\*.*?\\*/",
+                    "green", true, true);
 
-        // Normal comments in grey.
-        line = matchAndColor(line, textArea, "(//[^\\n]*)",
-                "grey", false, false);
+            // Normal comments in grey.
+            line = matchAndColor(line, textArea, "(//[^\\n]*)",
+                    "grey", false, false);
 
-        // Strings and chars in green.
-        line = matchAndColor(line, textArea, "\"([^\"]*)\"",
-                "green", true, true);
+            // Strings and chars in green.
+            line = matchAndColor(line, textArea, "\"([^\"]*)\"",
+                    "green", true, true);
 
-        int index = 0;
-        int startIndex, endIndex;
-        boolean decrement = false;
-        while (index < line.length()) {
-            while (index < line.length() && (Character.isWhitespace(line.charAt(index)) ||
-                    (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') ||
-                    (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000'))) {
-                index++;
-            }
-            if (decrement) {
-                decrement = false;
-                startIndex = index - 1;
-            } else {
-                startIndex = index;
-            }
-            while (index < line.length() && !Character.isWhitespace(line.charAt(index))) {
-                if (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') {
-                    decrement = true;
-                    break;
+            int index = 0;
+            int startIndex, endIndex;
+            boolean decrement = false;
+            while (index < line.length()) {
+                while (index < line.length() && (Character.isWhitespace(line.charAt(index)) ||
+                        (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') ||
+                        (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000'))) {
+                    index++;
                 }
-                if (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000') {
-                    break;
+                if (decrement) {
+                    decrement = false;
+                    startIndex = index - 1;
+                } else {
+                    startIndex = index;
                 }
-                index++;
-            }
-            endIndex = index;
+                while (index < line.length() && !Character.isWhitespace(line.charAt(index))) {
+                    if (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') {
+                        decrement = true;
+                        break;
+                    }
+                    if (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000') {
+                        break;
+                    }
+                    index++;
+                }
+                endIndex = index;
 
-            // If it is a keyword, color it orange (#FF9D00).
-            if (ORANGE_KEY_WORDS.contains(line.substring(startIndex, endIndex))) {
-                colorThis(textArea, "FF9D00", new int[] { startIndex, endIndex });
-            } // Otherwise color it white.
-            else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
-                colorThis(textArea, "white", new int[] { startIndex, endIndex });
+                try {
+
+                    // Check if it is an integer and color it blue.
+                    // NumberFormatException will mean it is not one.
+                    Integer.parseInt(line.substring(startIndex, endIndex));
+                    colorThis(textArea, "#348CEB", new int[]{startIndex, endIndex});
+                } catch (NumberFormatException ignored) {
+                    try {
+
+                        // Check if it is a double and color it blue.
+                        // NumberFormatException will mean it is not one.
+                        Double.parseDouble(line.substring(startIndex, endIndex));
+                        colorThis(textArea, "#348CEB", new int[]{startIndex, endIndex});
+                    } catch (NumberFormatException ignored2) {
+                        // If it is a keyword, color it orange (#FF9D00).
+                        if (ORANGE_KEY_WORDS.contains(line.substring(startIndex, endIndex))) {
+                            colorThis(textArea, "FF9D00", new int[]{startIndex, endIndex});
+                        } // Otherwise color it white.
+                        else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
+                            colorThis(textArea, "white", new int[]{startIndex, endIndex});
+                        }
+                    }
+                }
             }
+
+            // Remove any styles that could be on white spaces.
+            Platform.runLater(() -> {
+                for (int i = 0; i < textArea.getText().length(); i++) {
+                    if (textArea.getText().charAt(i) == ' ') {
+                        textArea.setStyle(i, i + 1, "");
+                    }
+                }
+            });
+        });
+        t.start();
+        return t;
+
+    }
+
+    /**
+     * Colors all TextAreas.
+     */
+    public static void colorAll() {
+
+        for (OpenFile file : OpenFilesTracker.getOpenFiles()) {
+            color((CustomTextArea) file.getTab().getContent());
         }
 
     }
@@ -572,7 +621,8 @@ public class EditAreaManager {
      */
     private static void colorThis(CustomTextArea textArea, String color, int[] word) {
 
-        textArea.setStyle(word[0], word[1], "-fx-fill: " + color + ";");
+        // Run UI changes on JavaFX Thread.
+        Platform.runLater(() -> textArea.setStyle(word[0], word[1], "-fx-fill: " + color + ";"));
     }
 
     /**
@@ -760,6 +810,114 @@ public class EditAreaManager {
             });
         });
 
+    }
+
+    /**
+     * Retrieves the compilationTooltip.
+     *
+     * @return compilationTooltip.
+     */
+    public static Tooltip getComplitionTooltip() {
+
+        return complitionTooltip;
+    }
+
+    /**
+     * Highlights the next line to be executed during debugging.
+     *
+     * @param location The location of the line.
+     * @return Whether it was successful.
+     */
+    public static boolean highlightDebugLine(Location location) {
+
+        String className = location.declaringType().name();
+        int lineNumber = location.lineNumber();
+        String[] parts = className.split("\\.");
+        Path path = null;
+
+        // Find the source file.
+        for (int i = parts.length - 1; i >= 0; i--) {
+            Optional<Path> optionalPath = DirectoryManager.findFile(parts[i], null);
+            if (optionalPath == null || optionalPath.isEmpty()) {
+                if (SettingsUtility.getJavaPath() != null) {
+                    optionalPath = DirectoryManager.findFile(parts[i],
+                            Paths.get("src/main/files/src"));
+                }
+            }
+            if (optionalPath != null && optionalPath.isPresent()) {
+                path = optionalPath.get();
+                break;
+            }
+        }
+        if (path == null) {
+            return false;
+        }
+        Path finalPath = path;
+        CountDownLatch latch = new CountDownLatch(1);
+
+        // Final arrays to be able to use them in lambda.
+        final CustomTextArea[] textArea = new CustomTextArea[1];
+        final AtomicInteger[] start = {new AtomicInteger()};
+        final AtomicInteger[] end = {new AtomicInteger()};
+
+        // UI changes on JavaFX Thread.
+        Platform.runLater(() -> {
+            OpenFile file = OpenFilesTracker.getOpenFile(finalPath);
+            if (file == null) {
+
+                // Open the file if it is not already open.
+                FileManager.openFile(finalPath);
+            }
+            Tab tab = OpenFilesTracker.getOpenFile(finalPath).getTab();
+            textArea[0] = (CustomTextArea) tab.getContent();
+
+            // Get the absolute position in the TextArea of the line.
+            start[0].set(textArea[0].getAbsolutePosition(lineNumber - 1, 0));
+            end[0].set(textArea[0].getAbsolutePosition(lineNumber, 0));
+
+            // Scroll to the line.
+            textArea[0].showParagraphAtCenter(location.lineNumber() - 1);
+            if (file != null) {
+                try {
+                    color(textArea[0]).join();
+                } catch (Exception e) {
+                    logger.error(e);
+                }
+            }
+
+            // Release the thread being blocked by the latch.
+            latch.countDown();
+        });
+
+        // Different call to ensure these tasks are executed last.
+        new Thread(() -> {
+            try {
+
+                // Wait.
+                latch.await();
+            } catch (Exception e) {
+                logger.error(e);
+            }
+            Platform.runLater(() -> {
+                for (int i = start[0].get(); i < end[0].get(); i++) {
+
+                    // Add highlight to each of these characters.
+                    textArea[0].setStyle(i, i + 1, textArea[0].getStyleOfChar(i) + "-rtfx-background-color: grey;");
+                }
+            });
+        }).start();
+        return true;
+
+    }
+
+    /**
+     * Retrieves the completionTooltipCurrentFocus.
+     *
+     * @return completionTooltipCurrentFocus.
+     */
+    public static Integer getCompletionTooltipCurrentFocus() {
+
+        return completionTooltipCurrentFocus;
     }
 
 }

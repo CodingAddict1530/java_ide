@@ -64,6 +64,9 @@ public class ApplicationModel {
     public static void setUp(FXMLLoader fxmlLoader) {
 
         ArrayList<Path> previousContent = MainUtility.readOpenData(Paths.get("src/main/files/records.fus"));
+
+        // Import Java source code if not already imported.
+        MainUtility.importSrcFiles();
         Controller controller = fxmlLoader.getController();
         controller.addPreviousContent(previousContent);
         if (MainUtility.checkAndFix()) {
