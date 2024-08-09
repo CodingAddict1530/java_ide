@@ -27,6 +27,7 @@ module com.project.javaeditor {
     requires org.eclipse.lsp4j.jsonrpc;
     requires com.google.gson;
     requires org.fxmisc.undo;
+    requires jdk.jdi;
 
     opens com.project.javaeditor to javafx.fxml;
     opens com.project.utility to com.google.gson;
