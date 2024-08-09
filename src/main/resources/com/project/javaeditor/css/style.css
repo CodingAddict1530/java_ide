@@ -3,6 +3,10 @@
     src: url('../fonts/JetBrainsMono-VariableFont_wght.ttf');
 }
 
+.bp {
+    -fx-background-color: #a14a4a;
+}
+
 .label-focused {
     -fx-background-color: #515453;
 }
@@ -49,8 +53,13 @@
     -fx-padding: 1px;
 }
 
-.vertical-split-pane > .split-pane-divider {
+.vertical-split-pane1 > .split-pane-divider {
     -fx-background-color: #2d2e2e;
+    -fx-padding: 7px;
+}
+
+.vertical-split-pane2 > .split-pane-divider {
+    -fx-padding: 7px;
 }
 
 .footerBtn {
@@ -124,6 +133,17 @@
     -fx-text-fill: red;
 }
 
+.debug-variable {
+    -fx-font-size: 1.1em;
+    -fx-padding: 1em;
+    -fx-font-family: 'JetBrains Mono';
+    -fx-text-fill: #f0f0f0;
+}
+
+.debug-variable:hover {
+    -fx-background-color: #2d2e2e;
+}
+
 .custom-text-area {
     -fx-font-size: 14px;
 }
@@ -136,7 +156,6 @@
     -fx-padding: 1em;
     -fx-font-family: 'JetBrains Mono';
     -fx-background-color: #2d2e2e;
-    -fx-text-fill: #f0f0f0;
 }
 
 .inline-css-text-area-console .caret, .custom-text-area .caret {
@@ -147,12 +166,23 @@
     -fx-background-color: transparent;
 }
 
-.tree-view .scroll-bar .increment-arrow-button, .tree-view .scroll-bar .decrement-arrow-button {
+.tree-view .scroll-bar .increment-arrow-button, .tree-view .scroll-bar .decrement-arrow-button,
+.variable-area .scroll-bar .increment-arrow-button, .variable-area .scroll-bar .decrement-arrow-button{
     -fx-background-color: transparent;
     -fx-pref-width: 0;
     -fx-pref-height: 0;
 }
 
-.tree-view .scroll-bar .thumb {
+.tree-view .scroll-bar .thumb, .variable-area .scroll-bar .thumb {
     -fx-background-color: #959493;
+}
+
+.variable-area {
+    -fx-padding: 0;
+}
+
+.variable-area .scroll-bar, .variable-area .corner {
+    -fx-background-color: #424746;
+    -fx-border-color: #424746;
+    -fx-padding: 0;
 }
