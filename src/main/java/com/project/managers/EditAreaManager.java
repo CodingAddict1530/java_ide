@@ -18,7 +18,7 @@
 package com.project.managers;
 
 import com.project.custom_classes.*;
-import com.project.gradle.GradleWrapper;
+import com.project.utility.MainUtility;
 import com.project.utility.SettingsUtility;
 import com.sun.jdi.Location;
 import javafx.animation.KeyFrame;
@@ -26,22 +26,13 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.geometry.Point2D;
-import javafx.scene.control.Tooltip;
-import javafx.scene.control.Tab;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.input.MouseEvent;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.*;
+import javafx.scene.input.*;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.SignatureHelp;
 import org.eclipse.lsp4j.Hover;
@@ -49,12 +40,12 @@ import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.MarkedString;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.fxmisc.richtext.event.MouseOverTextEvent;
+import org.fxmisc.richtext.model.StyleSpansBuilder;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -65,9 +56,9 @@ import java.util.regex.Pattern;
 public class EditAreaManager {
 
     /**
-     * A list of the keywords to be colored orange.
+     * A list of the keywords.
      */
-    public static final ArrayList<String> ORANGE_KEY_WORDS = new ArrayList<>(List.of(
+    public static final ArrayList<String> KEY_WORDS = new ArrayList<>(List.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch",
             "char", "class", "const", "continue", "default", "do", "double", "else", "enum",
             "extends", "final", "finally", "float", "for", "goto", "if", "implements",
@@ -78,9 +69,46 @@ public class EditAreaManager {
     ));
 
     /**
-     * The logger for the class.
+     * Regex to match keywords.
      */
-    private static final Logger logger = LogManager.getLogger(GradleWrapper.class);
+    private static final String KEYWORD_PATTERN = "\\b(" + String.join("|", KEY_WORDS) + ")\\b";
+
+    /**
+     * Regex to match single line comments.
+     */
+    private static final String COMMENT_PATTERN = "//[^\n]*";
+
+    /**
+     * Regex to match block comments.
+     */
+    private static final String BLOCK_COMMENT_PATTERN = "/\\*[^*]*\\*+(?:[^/*][^*]*\\*+)*/";
+
+    /**
+     * Regex to match Strings.
+     */
+    private static final String STRING_PATTERN = "\"([^\"\\\\]|\\\\.)*\"";
+
+    /**
+     * Regex to match characters.
+     */
+    private static final String CHAR_PATTERN = "'([^'\\\\]|\\\\.)*'";
+
+    /**
+     * Regex to match numbers and decimals.
+     */
+    private static final String NUMBER_PATTERN = "\\b\\d+(\\.\\d+)?\\b";
+
+    /**
+     * Pattern to match differently colored words.
+     */
+    private static final Pattern PATTERN = Pattern.compile(
+            "(?<KEYWORD>" + KEYWORD_PATTERN + ")"
+                    + "|(?<BLOCKCOMMENT>" + BLOCK_COMMENT_PATTERN + ")"
+                    + "|(?<COMMENT>" + COMMENT_PATTERN + ")"
+                    + "|(?<STRING>" + STRING_PATTERN + ")"
+                    + "|(?<CHAR>" + CHAR_PATTERN + ")"
+                    + "|(?<NUMBER>" + NUMBER_PATTERN + ")"
+    );
 
     /**
      * Button on footer displaying current line and character.
@@ -130,6 +158,10 @@ public class EditAreaManager {
      * Used by the language server.
      */
     private static final Map<Tab, Integer> currentVersions = new HashMap<>();
+
+    private static final Map<Diagnostic, Path> diagnostics = new HashMap<>();
+
+    private static EventHandler<ScrollEvent> scrollEV;
 
     /**
      * Whether the operation is an undo.
@@ -208,6 +240,21 @@ public class EditAreaManager {
 
                 // Increment the version of the file.
                 currentVersions.replace(tab, currentVersions.get(tab) + 1);
+
+                // Get a copy of the keys to be able to delete diagnostics for the file being edited.
+                Set<Diagnostic> copy = new HashSet<>(diagnostics.keySet());
+                for (Diagnostic diagnostic : copy) {
+
+                    // Check if the diagnostic belongs to the current file.
+                    if (diagnostics.get(diagnostic).equals(OpenFilesTracker.getOpenFile(tab).getFile().toPath())) {
+                        diagnostics.remove(diagnostic);
+                    }
+                }
+
+                // Remove the Error Canvas to allow a new one to be generated.
+                if (((StackPane) textArea.getParent()).getChildren().size() > 1 && ((CustomCanvas) ((StackPane) textArea.getParent()).getChildren().get(1)).getType().equals("Error")) {
+                    ((StackPane) textArea.getParent()).getChildren().remove(1);
+                }
 
                 // Notify the server that the file contents have changed.
                 JLSManager.didChange(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), newValue, currentVersions.get(tab));
@@ -473,156 +520,48 @@ public class EditAreaManager {
      * Colors the CustomTextArea.
      *
      * @param textArea The CustomTextArea.
-     * @return The Thread.
      */
-    public static Thread color(CustomTextArea textArea) {
+    public static void color(CustomTextArea textArea) {
 
         // Run on different thread since the operation might block the main thread.
-        Thread t = new Thread(() -> {
-            String line = textArea.getInnerTextArea().getText();
+        new Thread(() -> {
 
-            // Javadoc comments in green.
-            line = matchAndColor(line, textArea, "/\\*.*?\\*/",
-                    "green", true, true);
+            String text = textArea.getText();
+            Matcher matcher = PATTERN.matcher(text);
 
-            // Normal comments in grey.
-            line = matchAndColor(line, textArea, "(//[^\\n]*)",
-                    "grey", false, false);
+            // Used to tell whether there are character in between words being colored.
+            int lastKeyWordEnd = 0;
 
-            // Strings and chars in green.
-            line = matchAndColor(line, textArea, "\"([^\"]*)\"",
-                    "green", true, true);
+            StyleSpansBuilder<Collection<String>> spansBuilder = new StyleSpansBuilder<>();
+            while (matcher.find()) {
+                String styleClass =
+                        matcher.group("KEYWORD") != null ? "keyword" :
+                        matcher.group("BLOCKCOMMENT") != null ? "block-comment" :
+                        matcher.group("COMMENT") != null ? "comment" :
+                        matcher.group("STRING") != null ? "string" :
+                        matcher.group("CHAR") != null ? "char" :
+                        matcher.group("NUMBER") != null ? "number" :
+                        "default";
 
-            int index = 0;
-            int startIndex, endIndex;
-            boolean decrement = false;
-            while (index < line.length()) {
-                while (index < line.length() && (Character.isWhitespace(line.charAt(index)) ||
-                        (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') ||
-                        (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000'))) {
-                    index++;
+                // If there were characters in between words being colored.
+                // Set them to the default color.
+                if (matcher.start() > lastKeyWordEnd) {
+                    spansBuilder.add(Collections.singleton("default"), matcher.start() - lastKeyWordEnd);
                 }
-                if (decrement) {
-                    decrement = false;
-                    startIndex = index - 1;
-                } else {
-                    startIndex = index;
-                }
-                while (index < line.length() && !Character.isWhitespace(line.charAt(index))) {
-                    if (index > 0 && line.charAt(index - 1) == '\u0000' && line.charAt(index) != '\u0000') {
-                        decrement = true;
-                        break;
-                    }
-                    if (index > 0 && line.charAt(index) == '\u0000' && line.charAt(index - 1) != '\u0000') {
-                        break;
-                    }
-                    index++;
-                }
-                endIndex = index;
 
-                try {
-
-                    // Check if it is an integer and color it blue.
-                    // NumberFormatException will mean it is not one.
-                    Integer.parseInt(line.substring(startIndex, endIndex));
-                    colorThis(textArea, "#348CEB", new int[]{startIndex, endIndex});
-                } catch (NumberFormatException ignored) {
-                    try {
-
-                        // Check if it is a double and color it blue.
-                        // NumberFormatException will mean it is not one.
-                        Double.parseDouble(line.substring(startIndex, endIndex));
-                        colorThis(textArea, "#348CEB", new int[]{startIndex, endIndex});
-                    } catch (NumberFormatException ignored2) {
-                        // If it is a keyword, color it orange (#FF9D00).
-                        if (ORANGE_KEY_WORDS.contains(line.substring(startIndex, endIndex))) {
-                            colorThis(textArea, "FF9D00", new int[]{startIndex, endIndex});
-                        } // Otherwise color it white.
-                        else if (!line.substring(startIndex, endIndex).contains("\u0000")) {
-                            colorThis(textArea, "white", new int[]{startIndex, endIndex});
-                        }
-                    }
-                }
+                // Color the word.
+                spansBuilder.add(Collections.singleton(styleClass), matcher.end() - matcher.start());
+                lastKeyWordEnd = matcher.end();
             }
 
-            // Remove any styles that could be on white spaces.
-            Platform.runLater(() -> {
-                for (int i = 0; i < textArea.getText().length(); i++) {
-                    if (textArea.getText().charAt(i) == ' ') {
-                        textArea.setStyle(i, i + 1, "");
-                    }
-                }
-            });
-        });
-        t.start();
-        return t;
+            // Color the remaining words with the default color.
+            spansBuilder.add(Collections.singleton("default"), text.length() - lastKeyWordEnd);
 
-    }
+            // Run UI updates on JavaFX Thread.
+            Platform.runLater(() -> textArea.setStyleSpans(0, spansBuilder.create()));
 
-    /**
-     * Colors all TextAreas.
-     */
-    public static void colorAll() {
+        }).start();
 
-        for (OpenFile file : OpenFilesTracker.getOpenFiles()) {
-            color((CustomTextArea) file.getTab().getContent());
-        }
-
-    }
-
-    /**
-     * Check if the line matches the regex pattern and color it.
-     *
-     * @param line The line to be checked.
-     * @param textArea The CustomTextArea.
-     * @param regex The regex pattern.
-     * @param color The color to apply.
-     * @param dotAll Whether to enable dotAll mode or not. Dot mode will match any character, even '\n'.
-     * @param boundaries Whether to color the boundaries as well.
-     * @return The formatted string.
-     */
-    private static String matchAndColor(String line, CustomTextArea textArea, String regex,
-                                String color, boolean dotAll, boolean boundaries) {
-        Pattern pattern;
-        if (dotAll) {
-            pattern = Pattern.compile(regex, Pattern.DOTALL);
-        } else {
-            pattern = Pattern.compile(regex);
-        }
-
-        // Create a matcher for the input text
-        Matcher matcher = pattern.matcher(line);
-
-        ArrayList<int[]> lineArray = new ArrayList<>();
-
-        // Find all matches
-        while (matcher.find()) {
-            if (boundaries) {
-                lineArray.add(new int[]{matcher.start(), matcher.end()});
-            } else {
-                lineArray.add(new int[]{matcher.start(1), matcher.end(1)});
-            }
-        }
-        StringBuilder modifiedLine = new StringBuilder(line);
-        for (int[] word: lineArray) {
-            colorThis(textArea, color, word);
-            modifiedLine.replace(word[0], word[1], "\u0000".repeat(word[1] - word[0]));
-        }
-
-        return modifiedLine.toString();
-    }
-
-    /**
-     * Colors a part of the text in the CustomTextArea.
-     *
-     * @param textArea The CustomTextArea.
-     * @param color The color to apply
-     * @param word Store beginning and end indexes of the word.
-     */
-    private static void colorThis(CustomTextArea textArea, String color, int[] word) {
-
-        // Run UI changes on JavaFX Thread.
-        Platform.runLater(() -> textArea.setStyle(word[0], word[1], "-fx-fill: " + color + ";"));
     }
 
     /**
@@ -681,101 +620,145 @@ public class EditAreaManager {
     }
 
     /**
-     * Processes a diagnostic from the server (Errors in the file).
+     * Adds diagnostics from the server into the diagnostics map.
      *
      * @param diagnostic The Diagnostic.
-     * @param file The Path to the file.
+     * @param path The Path to the file it belongs to.
      */
-    public static void processDiagnostic(Diagnostic diagnostic, Path file) {
+    public static void addDiagnostic(Diagnostic diagnostic, Path path) {
 
-        int startLine = diagnostic.getRange().getStart().getLine();
-        int endLine = diagnostic.getRange().getEnd().getLine();
-        int startChar = diagnostic.getRange().getStart().getCharacter();
-        int endChar = diagnostic.getRange().getEnd().getCharacter();
+        diagnostics.put(diagnostic, path);
+    }
 
-        Tab tab = null;
+    /**
+     * Processes the diagnostics of the file open in the selected tab.
+     */
+    public static void processDiagnostics() {
 
-        // A diagnostic referencing files used by the server will cause NullPointerException.
-        // This typically leaves tab null.
-        try {
-            tab = OpenFilesTracker.getOpenFile(file).getTab();
-        } catch (NullPointerException ignored) {}
+        for (Diagnostic diagnostic : diagnostics.keySet()) {
+            Tab tab = null;
 
-        if (tab == null) {
-            return;
-        }
+            // A diagnostic referencing files used by the server will cause NullPointerException.
+            // This typically leaves tab null.
+            try {
+                tab = OpenFilesTracker.getOpenFile(diagnostics.get(diagnostic)).getTab();
 
-        // Empty mouseEvents.
-        int size = mouseEvents.size();
-        CustomTextArea textArea = (CustomTextArea) tab.getContent();
-        for (int i = 0; i < size; i++) {
-            textArea.removeEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(0));
-            mouseEvents.remove(0);
-        }
-
-        // Recolor the TextArea to avoid previous formats from interfering.
-        color(textArea);
-
-        int start = 0;
-        int end = 0;
-
-        String text = textArea.getInnerTextArea().getText();
-
-        int currentLine = 0;
-        for (int i = 0; i < text.length(); i++) {
-
-            if (text.charAt(i) == '\n') {
-                currentLine++;
-
+                // Check whether the tab for the file is the selected tab.
+                // If not continue to next diagnostic.
+                if (!tab.getTabPane().getSelectionModel().getSelectedItem().equals(tab)) {
+                    continue;
+                }
+            } catch (NullPointerException ignored) {
             }
-            if (currentLine == startLine) {
-                for (int j = i; j < text.length(); j++) {
-                    if (j - i == startChar) {
-                        start = j;
-                        break;
+
+            if (tab == null) {
+                continue;
+            }
+
+            int startLine = diagnostic.getRange().getStart().getLine();
+            int endLine = diagnostic.getRange().getEnd().getLine();
+            int startChar = diagnostic.getRange().getStart().getCharacter();
+            int endChar = diagnostic.getRange().getEnd().getCharacter();
+            CustomTextArea textArea = (CustomTextArea) ((StackPane) tab.getContent()).getChildren().get(0);
+
+            Tooltip tooltip = new Tooltip(diagnostic.getMessage());
+
+            // Add event handler for showing the Tooltip
+            int finalStart = textArea.getAbsolutePosition(startLine, startChar);
+            int finalEnd = textArea.getAbsolutePosition(endLine, endChar);
+            final CustomTextArea[] textAreaArray = new CustomTextArea[] {textArea};
+            mouseEvents.add(event -> {
+                int index = textAreaArray[0].hit(event.getX(), event.getY()).getCharacterIndex().orElse(-1);
+                if (index >= finalStart && index < finalEnd) {
+                    if (!tooltip.isShowing()) {
+                        tooltip.show(textAreaArray[0], event.getScreenX(), event.getScreenY() + 10);
                     }
+                } else {
+                    tooltip.hide();
+                }
+                new Timeline(new KeyFrame(
+                        javafx.util.Duration.millis(4000),
+                        event2 -> tooltip.hide()
+                )).play();
+            });
+            textArea.addEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(mouseEvents.size() - 1));
+
+            // Check whether server is pointing to an unused variable.
+            if (diagnostic.getMessage().startsWith("The value of") && diagnostic.getMessage().endsWith("is not used")) {
+
+                // Simply color it and move to next diagnostic.
+                textArea.setStyleClass(textArea.position(startLine, startChar).toOffset(),
+                        textArea.position(endLine, endChar).toOffset(), "unused-var");
+                continue;
+            }
+
+            StackPane stackPane = (StackPane) textArea.getParent();
+            CustomCanvas canvas = null;
+
+            // Check whether there is an existing Canvas to show errors and use it.
+            if (stackPane.getChildren().size() > 1 && ((CustomCanvas) stackPane.getChildren().get(1)).getType().equals("Error")) {
+                canvas = (CustomCanvas) stackPane.getChildren().get(1);
+            }
+
+            // Otherwise create one.
+            if (canvas == null) {
+                canvas = new CustomCanvas(textArea.getScene().getWidth(), textArea.getScene().getHeight(), "Error");
+                stackPane.getChildren().add(1, canvas);
+                canvas.setMouseTransparent(true);
+            }
+
+            double startX;
+            double startY;
+            double endX;
+            double endY;
+
+            int originalCaretPosition = textArea.getCaretPosition();
+
+            // Use caret to get the coordinates of whether the error is.
+            // When the line is not in the viewport, getCaretBounds doesn't return.
+            // This will generate a NoSuchElementException or potentially a NullPointerException.
+            // Since we can't see the line, we move to the next diagnostic.
+            try {
+                textArea.moveTo(textArea.getAbsolutePosition(startLine, startChar));
+                startX = textArea.screenToLocal(textArea.getCaretBounds().get()).getMaxX();
+                startY = textArea.screenToLocal(textArea.getCaretBounds().get()).getMaxY();
+
+                textArea.moveTo(textArea.getAbsolutePosition(endLine, endChar));
+                endX = textArea.screenToLocal(textArea.getCaretBounds().get()).getMaxX();
+                endY = textArea.screenToLocal(textArea.getCaretBounds().get()).getMaxY();
+            } catch (NullPointerException | NoSuchElementException ignored) {
+                continue;
+            }
+            textArea.moveTo(originalCaretPosition);
+
+            // Set up GraphicsContent in order to draw.
+            GraphicsContext gc = canvas.getGraphicsContext2D();
+            gc.setStroke(Color.RED);
+            gc.setLineWidth(1);
+
+            // Clear path is any and go to start point.
+            gc.beginPath();
+            gc.moveTo(startX, startY);
+
+            // Loop through the width while zigzagging.
+            boolean down = true;
+            for (double x = startX; x < endX; x+=2) {
+                if (down) {
+                    gc.lineTo(x, startY + 0);
+                    down = false;
+                } else {
+                    gc.lineTo(x, startY - 2);
+                    down = true;
                 }
             }
-            if (currentLine == endLine) {
-                for (int j = i; j < text.length(); j++) {
-                    if (j - i == endChar) {
-                        end = j;
-                        break;
-                    }
-                }
-            }
-            if (start != 0 || end != 0) {
-                break;
-            }
+
+            // Move to the end point.
+            gc.lineTo(endX, endY);
+
+            // Color the path with predefined color.
+            gc.stroke();
 
         }
-
-        // Style the specified length in text with errors. Make it red.
-        for (int i = start; i < end; i++) {
-            String currentStyle = textArea.getStyleOfChar(i);
-            textArea.setStyle(i + 1, i + 2, currentStyle + " -fx-fill: red;");
-        }
-
-        Tooltip tooltip = new Tooltip(diagnostic.getMessage());
-
-        // Add event handler for showing the Tooltip
-        int finalStart = start + 1;
-        int finalEnd = end + 1;
-        mouseEvents.add(event -> {
-            int index = textArea.hit(event.getX(), event.getY()).getCharacterIndex().orElse(-1);
-            if (index >= finalStart && index < finalEnd) {
-                if (!tooltip.isShowing()) {
-                    tooltip.show(textArea, event.getScreenX(), event.getScreenY() + 10);
-                }
-            } else {
-                tooltip.hide();
-            }
-            new Timeline(new KeyFrame(
-                    javafx.util.Duration.millis(4000),
-                    event2 -> tooltip.hide()
-            )).play();
-        });
-        textArea.addEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(mouseEvents.size() - 1));
 
     }
 
@@ -853,7 +836,6 @@ public class EditAreaManager {
             return false;
         }
         Path finalPath = path;
-        CountDownLatch latch = new CountDownLatch(1);
 
         // Final arrays to be able to use them in lambda.
         final CustomTextArea[] textArea = new CustomTextArea[1];
@@ -862,51 +844,51 @@ public class EditAreaManager {
 
         // UI changes on JavaFX Thread.
         Platform.runLater(() -> {
+
             OpenFile file = OpenFilesTracker.getOpenFile(finalPath);
             if (file == null) {
 
                 // Open the file if it is not already open.
                 FileManager.openFile(finalPath);
             }
-            Tab tab = OpenFilesTracker.getOpenFile(finalPath).getTab();
-            textArea[0] = (CustomTextArea) tab.getContent();
+            textArea[0] = (CustomTextArea) ((StackPane) OpenFilesTracker.getOpenFile(finalPath).getTab().getContent()).getChildren().get(0);
 
             // Get the absolute position in the TextArea of the line.
             start[0].set(textArea[0].getAbsolutePosition(lineNumber - 1, 0));
             end[0].set(textArea[0].getAbsolutePosition(lineNumber, 0));
 
             // Scroll to the line.
-            textArea[0].showParagraphAtCenter(location.lineNumber() - 1);
-            if (file != null) {
-                try {
-                    color(textArea[0]).join();
-                } catch (Exception e) {
-                    logger.error(e);
-                }
-            }
+            textArea[0].showParagraphInViewport(location.lineNumber() - 1);
 
-            // Release the thread being blocked by the latch.
-            latch.countDown();
+            // Set up a canvas to highlight the current line.
+            MainUtility.setDebugCanvas(textArea[0], lineNumber);
+
+            // Set up a listener for scrolling to adjust the position of the highlight accordingly.
+            scrollEV = event -> MainUtility.setDebugCanvas(textArea[0], lineNumber);
+            textArea[0].addEventFilter(ScrollEvent.SCROLL, scrollEV);
+
         });
-
-        // Different call to ensure these tasks are executed last.
-        new Thread(() -> {
-            try {
-
-                // Wait.
-                latch.await();
-            } catch (Exception e) {
-                logger.error(e);
-            }
-            Platform.runLater(() -> {
-                for (int i = start[0].get(); i < end[0].get(); i++) {
-
-                    // Add highlight to each of these characters.
-                    textArea[0].setStyle(i, i + 1, textArea[0].getStyleOfChar(i) + "-rtfx-background-color: grey;");
-                }
-            });
-        }).start();
         return true;
+
+    }
+
+    /**
+     * Removes all Debug Canvas from all open tabs, if any.
+     */
+    public static void clearDebugCanvases() {
+
+        for (OpenFile file : OpenFilesTracker.getOpenFiles()) {
+            StackPane stackPane = (StackPane) file.getTab().getContent();
+
+            // Check whether there is a Debug canvas.
+            if (stackPane.getChildren().size() > 1 && ((CustomCanvas) stackPane.getChildren().get(1)).getType().equals("Debug")) {
+                stackPane.getChildren().remove(1);
+            } else if (stackPane.getChildren().size() > 2) {
+                stackPane.getChildren().remove(2);
+            }
+
+            stackPane.getChildren().get(0).removeEventFilter(ScrollEvent.SCROLL, scrollEV);
+        }
 
     }
 

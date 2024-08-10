@@ -733,16 +733,15 @@ public class JLSManager {
             return;
         }
         for (Diagnostic diagnostic : diagnosticList) {
-
-            // Use JavaFX thread since changes involve UI update.
-            Platform.runLater(() -> {
-                try {
-                    EditAreaManager.processDiagnostic(diagnostic, Paths.get(new URI(diagnostics.getUri())));
-                } catch (Exception e) {
-                    logger.error(e);
-                }
-            });
+            try {
+                EditAreaManager.addDiagnostic(diagnostic, Paths.get(new URI(diagnostics.getUri())));
+            } catch (Exception e) {
+                logger.error(e);
+            }
         }
+
+        // Use JavaFX thread since changes involve UI update.
+        Platform.runLater(EditAreaManager::processDiagnostics);
 
     }
 

@@ -29,6 +29,7 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
@@ -179,7 +180,7 @@ public class FileManager {
         textArea.setContextMenu(contextMenu);
         EditAreaManager.color(textArea);
 
-        newTab.setContent(textArea);
+        newTab.setContent(new StackPane(textArea));
         tabPane.getTabs().add(newTab);
 
         //Focus new tab.
@@ -222,7 +223,7 @@ public class FileManager {
             }
         }
 
-        CustomTextArea textArea = (CustomTextArea) tab.getContent();
+        CustomTextArea textArea  = (CustomTextArea) ((StackPane) tab.getContent()).getChildren().get(0);
         File file = OpenFilesTracker.getOpenFile(tab).getFile();
         if (file != null) {
 
@@ -308,6 +309,7 @@ public class FileManager {
 
         // Open a tab for the new file.
         newTab(file.getPath(), text.toString(), splitName[splitName.length - 1].equals("java"));
+        EditAreaManager.processDiagnostics();
 
     }
 

@@ -169,10 +169,10 @@ public class Debugger {
                 // Clean up
                 vm.dispose();
 
-                // Clear the variableArea.
+                // Clear the variableArea and remove highlightings.
                 Platform.runLater(() -> {
-                    EditAreaManager.colorAll();
                     ((VBox) variableArea.getContent()).getChildren().clear();
+                    EditAreaManager.clearDebugCanvases();
                 });
 
                 // Indicate that debugging is done.
@@ -308,6 +308,7 @@ public class Debugger {
 
                                 // Remove the existing StepRequest if any.
                                 vm.eventRequestManager().deleteEventRequest(stepRequest);
+                                Platform.runLater(EditAreaManager::clearDebugCanvases);
                             }
 
                             // Clear the variableArea.

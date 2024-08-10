@@ -17,6 +17,8 @@
 
 package com.project.utility;
 
+import com.project.custom_classes.CustomCanvas;
+import com.project.custom_classes.CustomTextArea;
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
 import com.project.managers.DirectoryManager;
@@ -24,6 +26,7 @@ import com.project.managers.ProjectManager;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.scene.Node;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
@@ -31,6 +34,8 @@ import com.project.managers.FileManager;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.Duration;
@@ -406,6 +411,50 @@ public class MainUtility {
             logger.error(e);
             return -1;
         }
+
+    }
+
+    /**
+     * Sets a Canvas to display the current line of execution. Or refreshes it.
+     *
+     * @param textArea The CustomTextArea to cover.
+     * @param lineNumber The line number to be highlighted.
+     */
+    public static void setDebugCanvas(CustomTextArea textArea, int lineNumber) {
+
+        CustomCanvas canvas;
+        StackPane stackPane = (StackPane) textArea.getParent();
+
+        // Check whether there is an existing Debug Canvas and remove it.
+        if (stackPane.getChildren().size() > 1) {
+            if (((CustomCanvas) stackPane.getChildren().get(1)).getType().equals("Debug")) {
+                stackPane.getChildren().remove(1);
+            } else if (stackPane.getChildren().size() > 2) {
+                stackPane.getChildren().remove(2);
+            }
+        }
+
+        // Add new Canvas.
+        canvas = new CustomCanvas(textArea.getScene().getWidth(), textArea.getScene().getHeight(), "Debug");
+        canvas.setMouseTransparent(true);
+        stackPane.getChildren().add(canvas);
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+
+        int originalCaretPosition = textArea.getCaretPosition();
+
+        // Get the Y position of the line and height
+        textArea.moveTo(textArea.getAbsolutePosition(lineNumber, 0));
+        try {
+            double startY = textArea.screenToLocal(textArea.getCaretBounds().get()).getMinY();
+            double lineHeight = textArea.screenToLocal(textArea.getCaretBounds().get()).getMaxY() - startY;
+
+            // Draw the highlight
+            gc.setFill(Color.web("#515453", 0.3));
+            gc.fillRect(0, startY, textArea.getWidth(), lineHeight);
+        } catch (NoSuchElementException ignored) {}
+
+        // Restore the original caret position
+        textArea.moveTo(originalCaretPosition);
 
     }
 

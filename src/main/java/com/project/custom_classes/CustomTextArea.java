@@ -21,19 +21,16 @@ import com.project.managers.EditAreaManager;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
-import javafx.scene.input.KeyEvent;
+import javafx.scene.input.*;
 import javafx.scene.layout.GridPane;
-import org.fxmisc.richtext.InlineCssTextArea;
+import org.fxmisc.richtext.CodeArea;
 import java.util.LinkedList;
 import java.util.Objects;
 
 /**
- * A custom InlineCssTextArea to use as the coding area.
+ * A custom CodeArea with extended functionality.
  */
-public class CustomTextArea extends InlineCssTextArea {
+public class CustomTextArea extends CodeArea {
 
     /**
      * Maximum number of redo and undo entries each.
@@ -41,10 +38,10 @@ public class CustomTextArea extends InlineCssTextArea {
     private static final int MAX_UNDO_REDO_ENTRIES = 1000;
 
     /**
-     * An inner InlineCssTextArea to hold the actual contents of the TextArea.
+     * An inner CodeArea to hold the actual contents of the TextArea.
      * This allows the outer TextArea to be modified for user interaction while preserving actual text.
      */
-    private final InlineCssTextArea innerTextArea = new InlineCssTextArea();
+    private final CodeArea innerTextArea = new CodeArea();
 
     /**
      * Number of time caret has to be moved.
@@ -372,16 +369,9 @@ public class CustomTextArea extends InlineCssTextArea {
         // Reacts to a key press.
         this.setOnKeyPressed(event -> {
 
-            int caretPosition = this.getCaretPosition();
-
             // Check if the key was ENTER.
             if (Objects.requireNonNull(event.getCode()) == KeyCode.ENTER) {
-                String textHandlerResult = textHandler(this);
-                this.insertText(caretPosition, textHandlerResult);
-                if (moveCaret != 0) {
-                    this.moveTo(this.getCaretPosition() - moveCaret * 4);
-                    moveCaret = 0;
-                }
+                int caretPosition = this.getCaretPosition();
 
                 // Autocomplete javadoc comment style.
                 if (this.getCaretPosition() >= 2 && this.getText().length() > 2 &&
@@ -390,6 +380,13 @@ public class CustomTextArea extends InlineCssTextArea {
                     this.replaceText(this.getCaretPosition(), this.getCaretPosition(), "\n ");
                     this.moveTo(this.getCaretPosition() - 2);
                     this.replaceText(this.getCaretPosition(), this.getCaretPosition(), " * ");
+                } else {
+                    String textHandlerResult = textHandler(this);
+                    this.insertText(caretPosition, textHandlerResult);
+                    if (moveCaret != 0) {
+                        this.moveTo(this.getCaretPosition() - (moveCaret - 1) * 4 - 1);
+                        moveCaret = 0;
+                    }
                 }
             }
 
@@ -407,6 +404,9 @@ public class CustomTextArea extends InlineCssTextArea {
         // Move caret of inner TextArea with that of the TextArea.
         this.caretPositionProperty().addListener((observable, oldValue, newValue) -> this.innerTextArea.moveTo(newValue));
 
+        // Process diagnostics as user scrolls.
+        this.addEventFilter(ScrollEvent.SCROLL, event -> EditAreaManager.processDiagnostics());
+
     }
 
     /**
@@ -414,7 +414,7 @@ public class CustomTextArea extends InlineCssTextArea {
      *
      * @return the inner InlineCssTextArea.
      */
-    public InlineCssTextArea getInnerTextArea() {
+    public CodeArea getInnerTextArea() {
 
         return this.innerTextArea;
     }
@@ -425,7 +425,7 @@ public class CustomTextArea extends InlineCssTextArea {
      * @param textArea The TextArea.
      * @return The indent String.
      */
-    public String textHandler(InlineCssTextArea textArea) {
+    public String textHandler(CustomTextArea textArea) {
 
         String line = getLine(textArea);
         int caretPosition = textArea.getCaretPosition();
@@ -442,7 +442,7 @@ public class CustomTextArea extends InlineCssTextArea {
      * @param textArea The TextArea.
      * @return The line.
      */
-    public String getLine(InlineCssTextArea textArea) {
+    public String getLine(CustomTextArea textArea) {
 
         int caretPosition = textArea.getCaretPosition();
         int start = (caretPosition == 0) ? 0 : caretPosition - 1;
