@@ -186,3 +186,23 @@
     -fx-border-color: #424746;
     -fx-padding: 0;
 }
+
+.keyword {
+    -fx-fill: #eb8634;
+}
+
+.comment, .unused-var {
+    -fx-fill: #807e7d;
+}
+
+.string, .char, .block-comment {
+    -fx-fill: #3e6b3f;
+}
+
+.number {
+    -fx-fill: #2b78b3;
+}
+
+.default {
+    -fx-fill: #f0f0f0;
+}
