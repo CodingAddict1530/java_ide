@@ -17,40 +17,54 @@
 
 package com.project.utility;
 
-import com.project.custom_classes.CustomCanvas;
-import com.project.custom_classes.CustomTextArea;
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
+import com.project.custom_classes.CustomCanvas;
+import com.project.custom_classes.CustomTextArea;
 import com.project.managers.DirectoryManager;
 import com.project.managers.ProjectManager;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
+import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.TextInputDialog;
-import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
-import com.project.managers.FileManager;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
+import com.project.managers.FileManager;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
+import javafx.stage.Modality;
 import javafx.stage.StageStyle;
+import javafx.stage.Popup;
 import javafx.util.Duration;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
-import java.util.*;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Optional;
+import java.util.Objects;
+import java.util.Set;
+import java.util.EnumSet;
+import java.util.NoSuchElementException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -62,17 +76,26 @@ public class MainUtility {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(MainUtility.class);
+    private static final Logger logger = LoggerFactory.getLogger(MainUtility.class);
 
     /**
      * An ArrayList containing the Path to the open project.
      */
     private static ArrayList<Path> openProjectPath;
 
+    /**
+     * A Popup to inform the user of something.
+     */
+    private static final Popup popup = new Popup();
+
+    /**
+     * The primary stage of the application.
+     */
+    private static Stage stage;
+
     // 1 Failed to write
     // 2 Failed to make readonly
     // 3 Nothing to write
-
     /**
      * Writes the open content to a file for storage.
      *
@@ -153,23 +176,17 @@ public class MainUtility {
 
     /**
      * Checks the project home directory and creates it if it is missing.
-     *
-     * @return Whether all went well.
      */
-    public static boolean checkAndFix() {
+    public static void checkAndFix() {
 
         File appHome = ProjectManager.APP_HOME;
         if (!appHome.exists()) {
             if (appHome.mkdir()) {
                 logger.info("App home directory created");
-                return true;
             } else {
                 logger.error("App home directory could not be created");
-                return false;
             }
         }
-
-        return true;
 
     }
 
@@ -187,6 +204,9 @@ public class MainUtility {
         dialog.setTitle(title);
         dialog.setHeaderText(text);
         dialog.setGraphic(null);
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.initStyle(StageStyle.UNDECORATED);
+        dialog.getDialogPane().getStylesheets().add(Objects.requireNonNull(MainUtility.class.getResource("css/alert-style.css")).toExternalForm());
         Optional<String> result = dialog.showAndWait();
         result.ifPresent(userInput -> output[0] = userInput);
         return output[0];
@@ -206,6 +226,7 @@ public class MainUtility {
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(text);
+        alert.initModality(Modality.APPLICATION_MODAL);
 
         // Use a danger image.
         ImageView confirmImage =new ImageView(new Image(Objects.requireNonNull(MainUtility.class.getResourceAsStream("icons/warning.png"))));
@@ -220,6 +241,32 @@ public class MainUtility {
         Optional<ButtonType> result = alert.showAndWait();
 
         return (result.isPresent() && result.get() == ButtonType.OK);
+
+    }
+
+    /**
+     * Displays a Popup message for the user.
+     *
+     * @param message The message.
+     */
+    public static void popup(Label message) {
+
+        // Run on JavaFX Thread.
+        Platform.runLater(() -> {
+            if (popup.isShowing()) {
+                popup.hide();
+            }
+
+            // Clear any existing contents.
+            popup.getContent().clear();
+            popup.getContent().add(message);
+            popup.setAutoHide(true);
+            popup.setHideOnEscape(true);
+            message.getStylesheets().add(Objects.requireNonNull(MainUtility.class.getResource("css/alert-style.css")).toExternalForm());
+            message.getStyleClass().add("popup-label");
+
+            popup.show(stage, stage.getWidth(), stage.getHeight());
+        });
 
     }
 
@@ -279,23 +326,24 @@ public class MainUtility {
     public static void importSrcFiles() {
 
         // Get the path to the jdk.
-        String jdkPath = SettingsUtility.getJavaPath();
+        Path jdkPath = SettingsUtility.getJavaPath();
         if (jdkPath == null) {
+            logger.error("JDK not detected!");
             return;
         }
 
         // Try to locate the zip containing the source files.
-        File src = new File(jdkPath, "lib/src.zip");
+        File src = new File(jdkPath.toFile(), "lib/src.zip");
         if (!src.exists()) {
-            src = new File(jdkPath, "src/src.zip");
+            src = new File(jdkPath.toFile(), "src/src.zip");
             if (!src.exists()) {
-                src = new File(jdkPath, "src.zip");
+                src = new File(jdkPath.toFile(), "src.zip");
                 if (!src.exists()) {
                     return;
                 }
             }
         }
-        Path destination = Paths.get("src/main/files/src");
+        Path destination = Paths.get("files/src");
 
         // Extract the source files.
         extractZip(src.toPath(), destination, false);
@@ -319,7 +367,7 @@ public class MainUtility {
                     // Delete the directory and its contents.
                     DirectoryManager.recursiveDelete(destination);
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                     return;
                 }
             } else {
@@ -327,8 +375,14 @@ public class MainUtility {
             }
         }
 
+        // Open a database connection.
+        Connection conn = DatabaseUtility.connect();
+
+        // Drop to the table to create a new one.
+        DatabaseUtility.executeUpdate(conn, "DROP TABLE IF EXISTS ClassMetaData");
+
         // Create the destination directory.
-        if (destination.toFile().mkdir()) {
+        if (destination.toFile().mkdirs()) {
             try (InputStream in = new FileInputStream(zipFile.toFile());
                  ZipInputStream zin = new ZipInputStream(in)) {
 
@@ -359,15 +413,21 @@ public class MainUtility {
                                     PosixFilePermission.GROUP_READ, PosixFilePermission.OTHERS_READ);
                             Files.setPosixFilePermissions(entryPath, perms);
                         }
+
+                        // Add class meta data to the database.
+                        addClassMetaData(entryPath, conn);
                     }
                     zin.closeEntry();
                 }
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
         } else {
             logger.error("{} directory could not be created", destination);
         }
+
+        // Close the database connection.
+        DatabaseUtility.close(conn);
 
     }
 
@@ -408,7 +468,7 @@ public class MainUtility {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
             return -1;
         }
 
@@ -459,6 +519,95 @@ public class MainUtility {
     }
 
     /**
+     * Add Metadata about a class.
+     *
+     * @param path The path to the class.
+     * @param conn The connection to the database.
+     * @throws IOException When something goes wrong with IO operations as the class is parsed.
+     */
+    public static void addClassMetaData(Path path, Connection conn) throws IOException {
+
+        // Check if the file is a java file.
+        if (path.toAbsolutePath().toString().endsWith(".java")) {
+            JavaParser parser = new JavaParser();
+            CompilationUnit cu = parser.parse(path).getResult().orElse(null);
+            if (cu != null) {
+                String packageName = cu.getPackageDeclaration().map(NodeWithName::getNameAsString).orElse("");
+                for (TypeDeclaration<?> type : cu.getTypes()) {
+                    String className = type.getNameAsString();
+                    DatabaseUtility.executeUpdate(
+                            conn,
+                            "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
+                                    "VALUES (?, ?, ?, ?)",
+                            packageName, className, (packageName.isEmpty()) ? className : packageName + "." + className, path.toAbsolutePath().toString()
+                    );
+
+                    // Add inner classes if there are any.
+                    type.getMembers().forEach(member -> {
+                        if (member instanceof TypeDeclaration<?> innerClass) {
+
+                            // Check whether that class doesn't exist in the database.
+                            try (ResultSet rs2 = DatabaseUtility.executeQuery(conn, "SELECT id FROM ClassMetaData " +
+                                    "WHERE className = ? AND path = ?", innerClass.getNameAsString(), path.toAbsolutePath().toString())) {
+                                if (!rs2.next()) {
+                                    DatabaseUtility.executeUpdate(
+                                            conn,
+                                            "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
+                                                    "VALUES (?, ?, ?, ?)",
+                                            packageName, innerClass.getNameAsString(), (packageName.isEmpty()) ? className + "$" + innerClass.getNameAsString() : packageName + "." + className + "$" + innerClass.getNameAsString(), path.toAbsolutePath().toString()
+                                    );
+                                }
+                            }catch (SQLException e) {
+                                logger.error(e.getMessage());
+                            }
+                            addInnerClassMetaData(packageName, innerClass, className, path, conn);
+                        }
+                    });
+                }
+            }
+        }
+
+    }
+
+    /**
+     * Adds an inner class to the database.
+     *
+     * @param packageName The name of the package.
+     * @param outerClass The outer class.
+     * @param outerClassName The name of the outer class.
+     * @param path The Path to the outer class.
+     * @param conn The database connection.
+     */
+    public static void addInnerClassMetaData(String packageName, TypeDeclaration<?> outerClass, String outerClassName, Path path, Connection conn) {
+
+        // Loop through each inner class.
+        outerClass.getMembers().forEach(member -> {
+            if (member instanceof TypeDeclaration<?> innerClass) {
+                String innerClassName = innerClass.getNameAsString();
+
+                // Check whether that class doesn't exist in the database.
+                try (ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT id FROM ClassMetaData " +
+                        "WHERE className = ? AND path = ?", innerClassName, path.toAbsolutePath().toString())) {
+                    if (!rs.next()) {
+                        DatabaseUtility.executeUpdate(
+                                conn,
+                                "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
+                                        "VALUES (?, ?, ?, ?)",
+                                packageName, innerClassName, (packageName.isEmpty()) ? outerClassName + "$" + innerClassName : packageName + "." + outerClassName + "$" + innerClassName, path.toAbsolutePath().toString()
+                        );
+                    }
+                }catch (SQLException e) {
+                    logger.error(e.getMessage());
+                }
+
+                // Recursively handle nested inner classes
+                addInnerClassMetaData(packageName, innerClass, outerClassName + "$" + innerClassName, path, conn);
+            }
+        });
+
+    }
+
+    /**
      * Sets up opeProjectPath.
      *
      * @param openProjectPath openProjectPath.
@@ -468,4 +617,13 @@ public class MainUtility {
         MainUtility.openProjectPath = openProjectPath;
     }
 
+    /**
+     * Sets up the primary stage.
+     *
+     * @param stage The primary Stage.
+     */
+    public static void setStage(Stage stage) {
+
+        MainUtility.stage = stage;
+    }
 }

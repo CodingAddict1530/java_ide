@@ -26,12 +26,13 @@ import com.project.utility.MainUtility;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.scene.control.Label;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import javafx.scene.control.SplitPane;
+import javafx.scene.layout.HBox;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
@@ -43,7 +44,7 @@ public class ProjectManager {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(ProjectManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(ProjectManager.class);
 
     /**
      * The ConsoleTextArea.
@@ -66,9 +67,29 @@ public class ProjectManager {
     private static RootTreeNode currentProject;
 
     /**
+     * The current root directory.
+     */
+    private static RootTreeNode currentRootDirectory;
+
+    /**
      * A GradleWrapper instance for the current project.
      */
     private static GradleWrapper gradleWrapper = null;
+
+    /**
+     * Divides the variableArea and the consoleTextArea.
+     */
+    private static SplitPane verticalSplitPane;
+
+    /**
+     * Contains the console components.
+     */
+    private static HBox console;
+
+    /**
+     * The InlineCssTextArea used for the console.
+     */
+    private static ConsoleTextArea cTextArea;
 
     /**
      * Creates a new project.
@@ -102,7 +123,21 @@ public class ProjectManager {
                         Application.fadeStage();
 
                         // Open the new project from the JavaFX thread and continue execution.
-                        Platform.runLater(() -> openProject(projectDir.toPath()));
+                        CountDownLatch openProjectLatch = new CountDownLatch(1);
+                        Platform.runLater(() -> openProject(projectDir.toPath(), openProjectLatch));
+
+                        // Open the console.
+                        Platform.runLater(() -> {
+
+                            console.getChildren().clear();
+                            console.getChildren().add(cTextArea);
+
+                            // Display the Console.
+                            verticalSplitPane.setDividerPositions(0.7);
+                            verticalSplitPane.getStyleClass().remove("vertical-split-pane1");
+                            verticalSplitPane.getStyleClass().add("vertical-split-pane2");
+                            console.setMaxHeight(HBox.USE_COMPUTED_SIZE);
+                        });
 
                         gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), projectDir, textArea);
                         try {
@@ -116,10 +151,19 @@ public class ProjectManager {
                             // Which would otherwise make gradle throw an Exception.
                             latch.await();
 
+                            // Reset the latch.
+                            latch = new CountDownLatch(1);
+
                             // Run gradle wrapper and create the wrapper.
                             gradleWrapper.runWrapper(latch);
+
+                            // Wait for task to finish.
+                            latch.await();
+
+                            // Release the Thread.
+                            openProjectLatch.countDown();
                         } catch (Exception e) {
-                            logger.error(e);
+                            logger.error(e.getMessage());
                         }
                     } else {
                         logger.info("Failed to create project {}", name);
@@ -162,6 +206,9 @@ public class ProjectManager {
                         "\t} else {",
                         "\t\tmainClass = 'Main'",
                         "\t}",
+                        "\tstandardInput = System.in",
+                        "\tstandardOutput = System.out",
+                        "\terrorOutput = System.err",
                         "\tclasspath = sourceSets.main.runtimeClasspath",
                         "}\n",
                         "tasks.register('debug', JavaExec) {",
@@ -170,15 +217,18 @@ public class ProjectManager {
                         "\t} else {",
                         "\t\tmainClass = 'Main'",
                         "\t}",
+                        "\tstandardInput = System.in",
+                        "\tstandardOutput = System.out",
+                        "\terrorOutput = System.err",
                         "\tclasspath = sourceSets.main.runtimeClasspath",
-                        "def port = project.hasProperty('port') ? project.port : '5006'",
+                        "\tdef port = project.hasProperty('port') ? project.port : '5006'\n",
                         "\tjvmArgs = [",
-                        "\t\t'-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:${port}'",
+                        "\t\t\"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:${port}\"",
                         "\t]",
                         "}"
                 ));
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
 
             // src directory and its components (Basic gradle project doesn't automatically create them).
@@ -191,17 +241,16 @@ public class ProjectManager {
                 }
             }
             gradleWrapper.runBuild();
-            System.out.println("Project build done");
+            MainUtility.popup(new Label("Project build done"));
 
         });
 
-        backgroundTask.setOnFailed(event -> {
-            System.out.println("Background task failed because: " + Arrays.toString(backgroundTask.getException().getStackTrace()));
-            logger.error("Background task failed");
-        });
+        backgroundTask.setOnFailed(event -> logger.error("Background task failed", backgroundTask.getException()));
 
         // Start the background task on a new thread to avoid blocking the main thread.
-        new Thread(backgroundTask).start();
+        Thread createProjectThread = new Thread(backgroundTask);
+        createProjectThread.setDaemon(true);
+        createProjectThread.start();
 
     }
 
@@ -210,44 +259,62 @@ public class ProjectManager {
      *
      * @param path The Path to the root directory.
      */
-    public static void openProject(Path path) {
+    public static void openProject(Path path, CountDownLatch latch) {
 
         path = DirectoryManager.openProject(path);
         if (path == null) {
             return;
         }
 
-        // Check whether it is a valid project.
-        boolean isProject = true;
-        for (String s: new String[] {"src", "build.gradle", "settings.gradle"}) {
-            File file = new File(path.toString(), s);
-            if (!file.exists()) {
-                isProject = false;
-                break;
+        Path finalPath = path;
+        Thread openPorjectThread = new Thread(() -> {
+
+            if (latch != null) {
+                try {
+                    latch.await();
+                } catch (Exception e) {
+                    logger.error(e.getMessage());
+                }
             }
-        }
-        if (isProject) {
 
-            // Update relevant data.
-            projectName.setText(path.toFile().getName());
-            currentProject = new RootTreeNode(path);
+            // Check whether it is a valid project.
+            boolean isProject = true;
+            for (String s: new String[] {"build.gradle", "settings.gradle"}) {
+                File file = new File(finalPath.toString(), s);
+                if (!file.exists()) {
+                    isProject = false;
+                    break;
+                }
+            }
+            RootTreeNode root = new RootTreeNode(finalPath);
+            currentRootDirectory = root;
+            if (isProject) {
 
-            // Create a new GradleWrapper for the project.
-            gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), path.toFile(), textArea);
+                // Update relevant data.
+                Platform.runLater(() -> projectName.setText(finalPath.toFile().getName()));
+                currentProject = root;
+                ProjectWatcher.watchClassPath(new File(root.getPath().toFile(), "src/main/java").toPath());
 
-            // Notify the server about the new project.
-            JLSManager.changeWorkSpaceFolder(path.toUri().toString(), path.toFile().getName(), true);
-        } else {
-            currentProject = null;
-        }
+                // Create a new GradleWrapper for the project.
+                gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), finalPath.toFile(), textArea);
 
-        // Start watching the entire project for changes on the directories.
-        // Changes in contents won't be detected.
-        if (!ProjectWatcher.getIsWatching()) {
-            ProjectWatcher.startWatching();
-        }
-        ProjectWatcher.unregisterAllPaths();
-        ProjectWatcher.registerPath(path);
+                // Notify the server about the new project.
+                JLSManager.changeWorkSpaceFolder(finalPath.toUri().toString(), finalPath.toFile().getName(), true);
+            } else {
+                currentProject = null;
+            }
+
+            // Start watching the entire project for changes on the directories.
+            // Changes in contents won't be detected.
+            ProjectWatcher.unregisterAllPaths();
+            ProjectWatcher.registerPath(finalPath);
+            if (!ProjectWatcher.getIsWatching().get()) {
+                ProjectWatcher.startWatching();
+            }
+
+        });
+        openPorjectThread.setDaemon(true);
+        openPorjectThread.start();
 
     }
 
@@ -256,19 +323,25 @@ public class ProjectManager {
      */
     public static void deleteProject() {
 
-        Path path = currentProject.getPath();
+        if (currentRootDirectory == null) {
+            return;
+        }
+        Path path = currentRootDirectory.getPath();
 
         // Prompt user to confirm.
         if (MainUtility.confirm("Delete "+ path.getFileName(), "This entire project will be deleted")) {
+
+            // Open the home of projects.
+            openProject(APP_HOME.toPath(), null);
+
+            FileManager.closeAll();
+            // Delete.
             currentProject = null;
             DirectoryManager.deleteDirectory(path);
+
+            // Notify the server about the change in workspace folders.
+            JLSManager.changeWorkSpaceFolder(path.toUri().toString(), path.toFile().getName(), false);
         }
-
-        // Notify the server about the change in workspace folders.
-        JLSManager.changeWorkSpaceFolder(path.toUri().toString(), path.toFile().getName(), false);
-
-        // Open the home of projects.
-        openProject(APP_HOME.toPath());
 
     }
 
@@ -280,6 +353,16 @@ public class ProjectManager {
     public static RootTreeNode getCurrentProject() {
 
         return currentProject;
+    }
+
+    /**
+     * Retrieves the current project.
+     *
+     * @return The current project.
+     */
+    public static RootTreeNode getCurrentRootDirectory() {
+
+        return currentRootDirectory;
     }
 
     /**
@@ -302,4 +385,33 @@ public class ProjectManager {
         ProjectManager.projectName = projectName;
     }
 
+    /**
+     * Sets up console.
+     *
+     * @param console console.
+     */
+    public static void setConsole(HBox console) {
+
+        ProjectManager.console = console;
+    }
+
+    /**
+     * Sets up cTextArea.
+     *
+     * @param cTextArea cTextArea.
+     */
+    public static void setCTextArea(ConsoleTextArea cTextArea) {
+
+        ProjectManager.cTextArea = cTextArea;
+    }
+
+    /**
+     * Sets up verticalSplitPane.
+     *
+     * @param verticalSplitPane verticalSplitPane.
+     */
+    public static void setVerticalSplitPane(SplitPane verticalSplitPane) {
+
+        ProjectManager.verticalSplitPane = verticalSplitPane;
+    }
 }

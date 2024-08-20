@@ -17,11 +17,13 @@
 
 package com.project.javaeditor;
 
+import com.project.managers.DirectoryManager;
 import com.project.managers.JLSManager;
 import com.project.utility.MainUtility;
 import javafx.fxml.FXMLLoader;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -34,7 +36,7 @@ public class ApplicationModel {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(ApplicationModel.class);
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationModel.class);
 
     /**
      * Starts the language server.
@@ -43,7 +45,6 @@ public class ApplicationModel {
 
         JLSManager.startServer();
         logger.info("Java Server started");
-
     }
 
     /**
@@ -53,7 +54,6 @@ public class ApplicationModel {
 
         JLSManager.stopServer();
         logger.info("Java Server stopped");
-
     }
 
     /**
@@ -63,26 +63,27 @@ public class ApplicationModel {
      */
     public static void setUp(FXMLLoader fxmlLoader) {
 
-        ArrayList<Path> previousContent = MainUtility.readOpenData(Paths.get("src/main/files/records.fus"));
+        ArrayList<Path> previousContent = MainUtility.readOpenData(Paths.get("files/records.fus"));
 
         // Import Java source code if not already imported.
-        MainUtility.importSrcFiles();
+        Thread srcFileSetUpThread = new Thread(MainUtility::importSrcFiles);
+        srcFileSetUpThread.setDaemon(true);
+        // Set low priority to avoid it from taking too much CPU.
+        srcFileSetUpThread.setPriority(1);
+        srcFileSetUpThread.start();
+
+        MainUtility.checkAndFix();
         Controller controller = fxmlLoader.getController();
         controller.addPreviousContent(previousContent);
-        if (MainUtility.checkAndFix()) {
-            logger.info("Fusion IDE home dir is OK");
-        } else {
-            logger.info("Fusion IDE home dir is NOT OK");
-        }
 
     }
 
     /**
-     * Saved data.
+     * Save data about the open project and files.
      */
     public static void save() {
 
-        switch (MainUtility.writeOpenData(Paths.get("src/main/files/records.fus"), true)) {
+        switch (MainUtility.writeOpenData(Paths.get("files/records.fus"), true)) {
             case 0:
                 logger.info("Successfully wrote to records.dat");
                 break;
@@ -92,6 +93,19 @@ public class ApplicationModel {
             case 2:
                 logger.info("Failed to make records.dat read only");
                 break;
+        }
+
+    }
+
+    /**
+     * Clean the temporary flash that holds deleted files.
+     */
+    public static void cleanTrash() {
+
+        try {
+            DirectoryManager.recursiveDelete(DirectoryManager.TRASH);
+        } catch (IOException e) {
+            logger.error(e.getMessage());
         }
 
     }

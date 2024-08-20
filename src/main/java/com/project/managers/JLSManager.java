@@ -20,9 +20,9 @@ package com.project.managers;
 import com.project.custom_classes.OpenFile;
 import com.project.custom_classes.OpenFilesTracker;
 import com.project.custom_classes.LanguageStatusParams;
+import com.project.utility.MainUtility;
 import javafx.application.Platform;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import javafx.scene.control.Label;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.MessageParams;
@@ -71,6 +71,8 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
@@ -92,7 +94,7 @@ public class JLSManager {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(JLSManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(JLSManager.class);
 
     /**
      * The language server interface.
@@ -122,9 +124,9 @@ public class JLSManager {
         @Override
         public void telemetryEvent(Object o) {
             try {
-                System.out.println("Telemetry event: " + o);
+                logger.info("Telemetry event: {}", o);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -140,7 +142,7 @@ public class JLSManager {
             try {
                 handleDiagnostics(diagnostics);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -154,9 +156,9 @@ public class JLSManager {
         @Override
         public void showMessage(MessageParams messageParams) {
             try {
-                System.out.println("Message: " + messageParams);
+                logger.info("Message: {}", messageParams);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -171,9 +173,9 @@ public class JLSManager {
         @Override
         public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams requestParams) {
             try {
-                System.out.println("Message request: " + requestParams.getMessage());
+                logger.info("Message request: {}", requestParams.getMessage());
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -189,10 +191,10 @@ public class JLSManager {
         @Override
         public CompletableFuture<Void> registerCapability(RegistrationParams params) {
             try {
-                System.out.println("Registered Capabilities: " + params);
+                logger.info("Registered Capabilities: {}", params);
                 return CompletableFuture.completedFuture(null);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
                 return null;
@@ -208,10 +210,10 @@ public class JLSManager {
         @Override
         public CompletableFuture<Void> unregisterCapability(UnregistrationParams params) {
             try {
-                System.out.println("Unregistered Capabilities: " + params);
+                logger.info("Unregistered Capabilities: {}", params);
                 return CompletableFuture.completedFuture(null);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
                 return null;
@@ -228,7 +230,7 @@ public class JLSManager {
             try {
                 return CompletableFuture.completedFuture(workspaceFolders);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
                 return null;
@@ -245,7 +247,7 @@ public class JLSManager {
             try {
                 logger.info("Message: {}", messageParams);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -259,9 +261,9 @@ public class JLSManager {
         @JsonNotification("language/status")
         public void languageStatus(LanguageStatusParams params) {
             try {
-                System.out.println("Language status: " + params);
+                logger.info("Language status: {}", params);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -275,9 +277,9 @@ public class JLSManager {
         @JsonNotification("language/eventNotification")
         public void languageEventNotification(Object params) {
             try {
-                System.out.println("Language event notif: " + params);
+                logger.info("Language event notification: {}", params);
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
                 resetServer();
                 incrementNOR();
             }
@@ -311,7 +313,7 @@ public class JLSManager {
                 }
             }
             if (config.isEmpty()) {
-                logger.fatal("OS NOT DETERMINED!");
+                logger.error("OS NOT DETERMINED!");
                 return;
             }
             String[] command = {
@@ -342,7 +344,7 @@ public class JLSManager {
             launcher.startListening();
             languageServer = launcher.getRemoteProxy();
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
     }
@@ -362,8 +364,7 @@ public class JLSManager {
                 languageServer.exit();
             }
         }catch (Exception e) {
-            System.out.println(e.getMessage());
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
     }
@@ -378,8 +379,8 @@ public class JLSManager {
 
         // Check if process id can be safely downcast.
         if (pid > Integer.MAX_VALUE || pid < Integer.MIN_VALUE) {
-            System.out.println("YIKES! PID: " + pid);
-            logger.fatal("PID: {} cant be safely converted to int", pid);
+            MainUtility.popup(new Label("Syntax Checking unavailable, try restarting Fusion IDE"));
+            logger.error("PID: {} cant be safely converted to int", pid);
             return;
         }
         initializeParams.setProcessId((int) pid);
@@ -398,7 +399,7 @@ public class JLSManager {
 
             languageServer.initialized(new InitializedParams());
         }).exceptionally(throwable -> {
-            logger.fatal("Initialization failed: {}", throwable.getMessage());
+            logger.error("Initialization failed: {}", throwable.getMessage());
             return null;
         });
 
@@ -488,7 +489,7 @@ public class JLSManager {
                 // Process the completion items
                 returnValue[0] = completionItems.isLeft() ? completionItems.getLeft() : completionItems.getRight().getItems();
             } else {
-                System.out.println("No completion items found.");
+                logger.info("No completion items found.");
             }
 
             // Release the thread.
@@ -505,7 +506,7 @@ public class JLSManager {
             // Wait for the completion items to be returned by the server.
             latch.await();
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
         return returnValue[0];
 
@@ -536,7 +537,7 @@ public class JLSManager {
                 // Process the signature help
                 returnValue[0] = signatureHelp;
             } else {
-                System.out.println("No signature help available.");
+                logger.info("No signature help available.");
             }
 
             // Release the thread.
@@ -554,7 +555,7 @@ public class JLSManager {
             // Wait for completion items to be returned by the server.
             latch.await();
         } catch (InterruptedException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
         return returnValue[0];
@@ -586,7 +587,7 @@ public class JLSManager {
                 // Process the hover information
                 returnValue[0] = hover;
             } else {
-                System.out.println("No hover information available.");
+                logger.info("No hover information available.");
             }
 
             // Release the thread.
@@ -604,7 +605,7 @@ public class JLSManager {
             // Wait for the server to return the information.
             latch.await();
         } catch (InterruptedException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
         return returnValue[0];
@@ -640,7 +641,7 @@ public class JLSManager {
         } else {
             for (WorkspaceFolder workspaceFolder : workspaceFolders) {
                 if (workspaceFolder.getUri().equals(uri)) {
-                    workspaceFolders.remove(new WorkspaceFolder(uri, name));
+                    workspaceFolders.remove(workspaceFolder);
                     break;
                 }
             }
@@ -736,7 +737,7 @@ public class JLSManager {
             try {
                 EditAreaManager.addDiagnostic(diagnostic, Paths.get(new URI(diagnostics.getUri())));
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
         }
 
@@ -885,7 +886,7 @@ public class JLSManager {
 
         if (numberOfResets.get() > 5) {
             stopServer();
-            System.out.println("SERVER ERROR!");
+            MainUtility.popup(new Label("SERVER NOTIFICATION ERROR!"));
         }
 
         numberOfResets.incrementAndGet();

@@ -21,6 +21,7 @@ import com.project.custom_classes.CustomTextArea;
 import javafx.scene.control.TabPane;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.layout.StackPane;
 
 /**
  * Handles text related operations (Cut, Copy and Paste).
@@ -43,7 +44,7 @@ public class TextManager {
     public static void cut() {
 
         copy();
-        CustomTextArea textArea = (CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent();
+        CustomTextArea textArea = (CustomTextArea) ((StackPane) tabPane.getSelectionModel().getSelectedItem().getContent()).getChildren().get(0);
         textArea.deleteText(textArea.getSelection().getStart(), textArea.getSelection().getEnd());
 
     }
@@ -53,7 +54,7 @@ public class TextManager {
      */
     public static void copy() {
 
-        CustomTextArea textArea = (CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent();
+        CustomTextArea textArea = (CustomTextArea) ((StackPane) tabPane.getSelectionModel().getSelectedItem().getContent()).getChildren().get(0);
         ClipboardContent content = new ClipboardContent();
         content.putString(textArea.getSelectedText());
         clipboard.setContent(content);
@@ -66,7 +67,7 @@ public class TextManager {
     public static void paste() {
 
         if (clipboard.hasString()) {
-            CustomTextArea textArea = (CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent();
+            CustomTextArea textArea = (CustomTextArea) ((StackPane) tabPane.getSelectionModel().getSelectedItem().getContent()).getChildren().get(0);
 
             // Replace any selected text.
             textArea.deleteText(textArea.getSelection().getStart(), textArea.getSelection().getEnd());

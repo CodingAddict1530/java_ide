@@ -22,10 +22,11 @@ import com.project.custom_classes.RootTreeNode;
 import com.project.managers.FileManager;
 import com.project.utility.MainUtility;
 import javafx.application.Platform;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.ToolProvider;
@@ -56,7 +57,7 @@ public class JavaCodeExecutor {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(JavaCodeExecutor.class);
+    private static final Logger logger = LoggerFactory.getLogger(JavaCodeExecutor.class);
 
     /**
      * A process to execute the tasks.
@@ -129,7 +130,7 @@ public class JavaCodeExecutor {
                         bufferedWriter.write(input + System.lineSeparator());
                         bufferedWriter.flush();
                     } catch (Exception e) {
-                        System.out.println(e.getMessage());
+                        logger.error(e.getMessage());
                     }
                     consoleTextArea.setStyle(consoleTextArea.getCaretPosition(), consoleTextArea.getCaretPosition(),
                             "-fx-fill: white;");
@@ -187,7 +188,7 @@ public class JavaCodeExecutor {
             }
         }
         if (fromSrc.isEmpty() && buildPath != null) {
-            System.out.println("File not in src!");
+            MainUtility.popup(new Label("File not in src!"));
             return 1;
         }
         fromSrc.remove(fromSrc.size() - 1);
@@ -253,11 +254,11 @@ public class JavaCodeExecutor {
                         Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "red"));
                     }
                 } catch (IOException e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
 
             });
-
+            outputThread.setDaemon(true);
             outputThread.start();
 
             // Thread to check exit status
@@ -276,15 +277,15 @@ public class JavaCodeExecutor {
                         }
                     }
                 } catch (InterruptedException e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
 
             });
-
+            statusThread.setDaemon(true);
             statusThread.start();
 
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
         return returnValue[0];
 
@@ -437,7 +438,7 @@ public class JavaCodeExecutor {
                 try {
                     consoleTextArea.appendText("\nProcess Finished with exit code " + process.waitFor() + "\n");
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
             });
         }
@@ -479,7 +480,7 @@ public class JavaCodeExecutor {
         try {
             return debugger.getCallStack();
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
             return null;
         }
 

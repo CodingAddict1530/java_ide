@@ -26,6 +26,4 @@ import java.nio.file.Path;
  * @param theme The chosen Theme.
  * @param fontSize The chosen font size.
  */
-public record SettingsResult(Path jdkFolder, Theme theme, int fontSize) {
-
-}
+public record SettingsResult(Path jdkFolder, Theme theme, int fontSize) {}

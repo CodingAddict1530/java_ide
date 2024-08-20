@@ -21,10 +21,11 @@ import com.project.custom_classes.ConsoleTextArea;
 import com.project.java_code_processing.Debugger;
 import com.project.utility.MainUtility;
 import javafx.application.Platform;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.BufferedWriter;
 import java.io.BufferedReader;
@@ -32,6 +33,7 @@ import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -42,7 +44,7 @@ public class GradleWrapper {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(GradleWrapper.class);
+    private static final Logger logger = LoggerFactory.getLogger(GradleWrapper.class);
 
     /**
      * The root directory of gradle files.
@@ -75,6 +77,11 @@ public class GradleWrapper {
     private Process runProcess;
 
     /**
+     * Used to write to a gradle process.
+     */
+    private BufferedWriter bufferedWriter;
+
+    /**
      * An Object used for synchronization.
      */
     private static final Object monitor = new Object();
@@ -105,25 +112,28 @@ public class GradleWrapper {
 
         // Determine the correct wrapper script based on OS
         this.wrapperScript = System.getProperty("os.name").toLowerCase().contains("windows")
-                ? "./gradlew.bat" : "./gradlew";
+                ? new File(projectHome, "gradlew.bat").toPath().toAbsolutePath().toString() :
+                new File(projectHome, "gradlew").toPath().toAbsolutePath().toString();
     }
 
     /**
      * Sets up the ConsoleTextArea to output and take user input as well.
      *
-     * @param bufferedWriter The BufferedWriter.
+     * @param process The Process.
      */
-    private void setUp(BufferedWriter bufferedWriter) {
+    private void setUp(Process process) {
 
+        bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
         textArea.setOnKeyPressed(event -> {
 
-            if (event.getCode().toString().equals("ENTER")) {
+            // ENTER Key will mean the user has submitted their input.
+            if (event.getCode().toString().equals("ENTER") && !event.isControlDown() && !event.isShiftDown()) {
                 String input = getUserInput(textArea);
                 try {
                     bufferedWriter.write(input + System.lineSeparator());
                     bufferedWriter.flush();
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error("Tried writing to process and failed:\n", e);
                 }
                 textArea.setStyle(textArea.getCaretPosition(), textArea.getCaretPosition(),
                         "-fx-fill: white;");
@@ -148,7 +158,7 @@ public class GradleWrapper {
         if (command.equals("debug")) {
             port = MainUtility.getPort();
             if (port == -1) {
-                System.out.println("Error getting port, try again");
+                MainUtility.popup(new Label("Error getting port, try again"));
                 return;
             }
         }
@@ -171,9 +181,11 @@ public class GradleWrapper {
         }
 
         try {
+
+            // Set working directory for the process.
+            processBuilder.directory(projectHome);
             runProcess = processBuilder.start();
-            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(runProcess.getOutputStream()));
-            new Thread(() -> setUp(bufferedWriter)).start();
+            setUp(runProcess);
             writeToConsole(runProcess, null);
 
             // Check if it is a debug session.
@@ -206,8 +218,6 @@ public class GradleWrapper {
 
         try {
             Process process = processBuilder.start();
-            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-            setUp(bufferedWriter);
             writeToConsole(process, null);
         } catch (Exception e) {
             logger.error("Error running Gradle command build", e);
@@ -228,8 +238,6 @@ public class GradleWrapper {
 
         try {
             Process process = processBuilder.start();
-            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-            setUp(bufferedWriter);
             writeToConsole(process, latch);
         } catch (Exception e) {
             logger.error("Error running Gradle command init", e);
@@ -250,8 +258,6 @@ public class GradleWrapper {
 
         try {
             Process process = processBuilder.start();
-            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-            setUp(bufferedWriter);
             writeToConsole(process, null);
         } catch (Exception e) {
             logger.error("Error running Gradle command wrapper", e);
@@ -294,9 +300,10 @@ public class GradleWrapper {
                     Platform.runLater(() -> appendStyledText(textArea, finalLine + "\n", "red"));
                 }
             } catch (IOException e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
         });
+        outputThread.setDaemon(true);
         outputThread.start();
 
         Thread statusThread = new Thread(() -> {
@@ -314,12 +321,14 @@ public class GradleWrapper {
                 if (debugger != null && debugger.hasFinished()) {
                     debugger = null;
                 }
+                bufferedWriter.close();
                 Platform.runLater(() -> textArea.appendText("\nProcess Finished with exit code " + exitCode + "\n"));
-            } catch (InterruptedException e) {
-                logger.error(e);
+            } catch (Exception e) {
+                logger.error(e.getMessage());
             }
 
         });
+        statusThread.setDaemon(true);
         statusThread.start();
 
     }
@@ -380,7 +389,7 @@ public class GradleWrapper {
                 try {
                     textArea.appendText("\nProcess Finished with exit code " + runProcess.waitFor() + "\n");
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
             });
         }
@@ -422,7 +431,7 @@ public class GradleWrapper {
         try {
             return debugger.getCallStack();
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
             return null;
         }
 

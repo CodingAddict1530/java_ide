@@ -29,8 +29,8 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Spinner;
 import javafx.scene.layout.GridPane;
 import javafx.stage.DirectoryChooser;
-import javax.tools.ToolProvider;
 import java.io.File;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
 
@@ -48,6 +48,11 @@ public class SettingsUtility {
      * The TabPane.
      */
     private static TabPane tabPane;
+
+    /**
+     * The path to the Fusion JDK.
+     */
+    private static final Path javaPath = Paths.get("dont_snoop");
 
     /**
      * Creates a dialog to act as the settings page.
@@ -122,12 +127,9 @@ public class SettingsUtility {
      *
      * @return The Path.
      */
-    public static String getJavaPath() {
+    public static Path getJavaPath() {
 
-        if (ToolProvider.getSystemJavaCompiler() != null) {
-            return System.getProperty("java.home");
-        }
-        return null;
+        return javaPath;
     }
 
     /**

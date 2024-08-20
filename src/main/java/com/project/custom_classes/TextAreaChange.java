@@ -24,5 +24,4 @@ package com.project.custom_classes;
  * @param text The text.
  * @param position The beginning position of the text.
  */
-public record TextAreaChange(diff_match_patch.Operation operation, String text,  int position) {
-}
+public record TextAreaChange(diff_match_patch.Operation operation, String text,  int position) {}

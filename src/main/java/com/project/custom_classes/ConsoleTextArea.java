@@ -19,7 +19,10 @@ package com.project.custom_classes;
 
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
+import javafx.scene.input.KeyEvent;
 import org.fxmisc.richtext.InlineCssTextArea;
+
+import java.util.Objects;
 
 /**
  * A custom InlineCssTextArea for the console.
@@ -48,13 +51,38 @@ public class ConsoleTextArea extends InlineCssTextArea {
     public ConsoleTextArea() {
 
         super();
+
+        // Style user input with color green.
+        this.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+
+            int caretPos = this.getCaretPosition();
+            String character = event.getCharacter();
+
+            // Consume event are retype the key in green
+            event.consume();
+
+            // Ignore keys when Control is down.
+            if (event.isControlDown()) {
+                return;
+            }
+            if (!Objects.equals(character, "\b")) {
+                this.insertText(caretPos, character);
+                this.moveTo(caretPos + 1);
+                if (character.matches("\\S")) {
+                    this.setStyle(caretPos,
+                            caretPos + 1, "-fx-fill: green;");
+                }
+            }
+        });
+
         this.textChangeListener = (observable, oldValue, newValue) -> {
 
             if (!ignore){
                 int newLength = newValue.length();
 
                 // Revert changes to the text.
-                if (this.getCaretPosition() < protectedTextLength[0]) {
+                if (this.getCaretPosition() < protectedTextLength[0] ||
+                        !this.getText(0, protectedTextLength[0]).equals(oldValue)) {
                     String oldProtectedText = oldValue.substring(0, protectedTextLength[0]);
                     try {
                         String newProtectedText = newValue.substring(0, protectedTextLength[0]);

@@ -37,20 +37,31 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.*;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.Button;
+import javafx.scene.control.Tooltip;
+import javafx.scene.control.Label;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Dialog;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-import javafx.stage.WindowEvent;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.awt.Desktop;
 import java.io.File;
 import java.net.URI;
@@ -171,7 +182,7 @@ public class Controller implements Initializable {
     private HBox footer;
 
     /**
-     * Contains the ConsoleTextArea.
+     * Contains the console components.
      */
     @FXML
     private HBox console;
@@ -245,7 +256,7 @@ public class Controller implements Initializable {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(Controller.class);
+    private static final Logger logger = LoggerFactory.getLogger(Controller.class);
 
     /**
      * A FileChooser Object to select files from device.
@@ -408,7 +419,7 @@ public class Controller implements Initializable {
     public void openProject() {
 
         FileManager.closeAll();
-        ProjectManager.openProject(null);
+        ProjectManager.openProject(null, null);
     }
 
     /**
@@ -453,7 +464,7 @@ public class Controller implements Initializable {
     @FXML
     public void undo() {
 
-        EditAreaManager.undoOrRedo((CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent(), true);
+        EditAreaManager.undoOrRedo((CustomTextArea) ((StackPane) tabPane.getSelectionModel().getSelectedItem().getContent()).getChildren().get(0), true);
     }
 
     /**
@@ -462,7 +473,7 @@ public class Controller implements Initializable {
     @FXML
     public void redo() {
 
-        EditAreaManager.undoOrRedo((CustomTextArea) tabPane.getSelectionModel().getSelectedItem().getContent(), false);
+        EditAreaManager.undoOrRedo((CustomTextArea) ((StackPane) tabPane.getSelectionModel().getSelectedItem().getContent()).getChildren().get(0), false);
     }
 
     /**
@@ -477,7 +488,7 @@ public class Controller implements Initializable {
                 desktop.browse(new URI("https://icons8.com/"));
             }
         } catch (Exception e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
     }
 
@@ -488,21 +499,17 @@ public class Controller implements Initializable {
      */
     public void addPreviousContent(ArrayList<Path> paths) {
 
-        try {
-            if (paths != null) {
-                ProjectManager.openProject(paths.get(0));
-                if (paths.size() > 1) {
-                    paths.remove(0);
-                    for (Path file : paths) {
-                        FileManager.openFile(file);
-                    }
+        if (paths != null && !paths.isEmpty()) {
+            ProjectManager.openProject(paths.get(0), null);
+            if (paths.size() > 1) {
+                paths.remove(0);
+                for (Path file : paths) {
+                    FileManager.openFile(file);
                 }
-                logger.info("Previous content added");
-            } else {
-                logger.info("No previous content");
             }
-        } catch (Exception e) {
-            logger.error(e);
+            logger.info("Previous content added");
+        } else {
+            logger.info("No previous content");
         }
 
     }
@@ -514,23 +521,6 @@ public class Controller implements Initializable {
 
         cTextArea = new ConsoleTextArea();
         cTextArea.getStyleClass().add("inline-css-text-area-console");
-
-        // Style user input with color green.
-        cTextArea.addEventFilter(KeyEvent.KEY_TYPED, event -> {
-
-            int caretPos = cTextArea.getCaretPosition();
-            String character = event.getCharacter();
-            event.consume();
-            if (!Objects.equals(character, "\b")) {
-                cTextArea.insertText(caretPos, character);
-                cTextArea.moveTo(caretPos + 1);
-                if (character.matches("\\S")) {
-                    cTextArea.setStyle(caretPos,
-                            caretPos + 1, "-fx-fill: green;");
-                }
-            }
-        });
-
         cTextArea.protectText();
         cTextArea.setEditable(false);
         HBox.setHgrow(cTextArea, Priority.ALWAYS);
@@ -652,12 +642,12 @@ public class Controller implements Initializable {
      */
     public void showSettings() {
 
-        String javaPath = SettingsUtility.getJavaPath();
+        String javaPath = SettingsUtility.getJavaPath().toString();
 
         Dialog<SettingsResult> dialog = SettingsUtility.createSettingsDialog(javaPath);
         dialog.showAndWait().ifPresent(result -> settingsResult = result);
 
-        System.out.println(settingsResult);
+        //MainUtility.popup(new Label(settingsResult.toString()));
 
     }
 
@@ -710,24 +700,36 @@ public class Controller implements Initializable {
         cTextArea.replaceText("");
         cTextArea.protectText();
 
-        // Check if file is part of the current project.
-        if (file.toPath().startsWith(ProjectManager.getCurrentProject().getPath())) {
+        // Check if file is part of the current project and is a java file.
+        if (ProjectManager.getCurrentProject() != null && file.toPath().startsWith(ProjectManager.getCurrentProject().getPath()) &&
+                (file.toPath().toString().endsWith(".java") || file.toPath().toString().endsWith("build.gradle"))) {
 
             // If so use gradle.
             gradleWrapper = new GradleWrapper(new File("lib/gradle-8.9"), ProjectManager.getCurrentProject().getPath().toFile(),
                     cTextArea);
             gradleWrapper.setVariableArea(variableArea);
-            new Thread(() -> {
+            Thread runThread = new Thread(() -> {
                 try {
-                    //gradleWrapper.runBuild().waitFor();
-                    gradleWrapper.run(file.getPackageName(), command);
+
+                    // Check whether it is run or build command.
+                    if (command.equals("build")) {
+                        gradleWrapper.runBuild();
+                    } else if (file.toPath().toString().endsWith("build.gradle")) {
+                        MainUtility.popup(new Label("Can't run this file. Try build..."));
+                    } else {
+                        gradleWrapper.run(file.getPackageName(), command);
+                    }
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
-            }).start();
+            });
+            runThread.setDaemon(true);
+            runThread.start();
         } else {
 
+            MainUtility.popup(new Label("Class not in project!"));
             // Otherwise use the JavaCodeExecutor.
+            /*
             new Thread(() -> {
                 switch (JavaCodeExecutor.run(file, null, command)) {
                     case 1:
@@ -740,7 +742,8 @@ public class Controller implements Initializable {
                         logger.info("Couldn't delete .class file of {}", file.getPath());
                         break;
                 }
-            }).start();
+            }).start().setDaemon;
+            */
         }
 
     }
@@ -767,6 +770,9 @@ public class Controller implements Initializable {
 
         ProjectManager.setConsoleTextArea((ConsoleTextArea) console.getChildren().get(0));
         ProjectManager.setProjectName(projectName);
+        ProjectManager.setConsole(console);
+        ProjectManager.setCTextArea(cTextArea);
+        ProjectManager.setVerticalSplitPane(verticalSplitPane);
 
 
         SettingsUtility.setDirectoryChooser(directoryChooser);
@@ -824,11 +830,12 @@ public class Controller implements Initializable {
                     // Wait 2 seconds before checking again.
                     Thread.sleep(2000);
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
             }
 
         });
+        filePathThread.setDaemon(true);
         filePathThread.start();
 
     }
@@ -874,7 +881,20 @@ public class Controller implements Initializable {
             // Install an informational tooltip.
             MainUtility.installTooltip("Settings", settingsBtn);
 
-            settingsOptions.getChildren().add(settingsBtn);
+            ImageView buildIcon = new ImageView(
+                    new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/build.png"))));
+            MainUtility.sizeImage(buildIcon, 20, 20);
+            Button buildBtn = new Button();
+            buildBtn.getStyleClass().add("runOptionBtn");
+            buildBtn.setGraphic(buildIcon);
+
+            // Listen for when the button is clicked.
+            buildBtn.setOnAction(event -> run("build"));
+
+            // Install an informational tooltip.
+            MainUtility.installTooltip("Build", buildBtn);
+
+            settingsOptions.getChildren().addAll(settingsBtn, buildBtn);
 
             ImageView runIcon = new ImageView(
                     new Image(Objects.requireNonNull(getClass().getResourceAsStream("icons/play.png"))));
@@ -960,20 +980,12 @@ public class Controller implements Initializable {
             btnClose.getStyleClass().add("topBarBtn");
             btnClose.setStyle("-fx-background-color: #B82E2E;");
             btnClose.setOnAction(event -> {
-                EventHandler<WindowEvent> closeRequestHandler = stage.getOnCloseRequest();
-                if (closeRequestHandler != null) {
-                    // Create a new WindowEvent
-                    WindowEvent windowEvent = new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST);
-                    // Fire the close request event
-                    closeRequestHandler.handle(windowEvent);
 
-                    // If the event is not consumed, close the stage
-                    if (!windowEvent.isConsumed()) {
-                        stage.close();
-                    }
-                } else {
+                if (MainUtility.confirm("Application about to close!", "Are you sure you want to exit?")) {
+                    ApplicationView.checkForUnsavedFiles();
                     stage.close();
                 }
+
             });
 
             // Install an informational tooltip.

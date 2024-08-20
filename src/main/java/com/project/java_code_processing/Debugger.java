@@ -48,8 +48,8 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +64,7 @@ public class Debugger {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(Debugger.class);
+    private static final Logger logger = LoggerFactory.getLogger(Debugger.class);
 
     /**
      * The address the JVM is running on (127.0.0.1).
@@ -173,12 +173,13 @@ public class Debugger {
                 Platform.runLater(() -> {
                     ((VBox) variableArea.getContent()).getChildren().clear();
                     EditAreaManager.clearDebugCanvases();
+                    System.out.println("LMAO");
                 });
 
                 // Indicate that debugging is done.
                 hasFinished = true;
             } catch (Exception e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
         }).start();
 
@@ -262,7 +263,6 @@ public class Debugger {
      */
     private void debug() throws Exception {
 
-        latch = new CountDownLatch(1);
         while (true) {
             EventSet eventSet = queue.remove();
             for (Event event : eventSet) {
@@ -285,11 +285,12 @@ public class Debugger {
                     }
                     handleStop();
 
+                    // Reset the CountDownLatch.
+                    latch = new CountDownLatch(1);
+
                     // Pause execution until debugger receives a notification.
                     latch.await();
 
-                    // Reset the CountDownLatch.
-                    latch = new CountDownLatch(1);
                     if (debugNotification == null || debugNotification.isEmpty()) {
                         continue;
                     }

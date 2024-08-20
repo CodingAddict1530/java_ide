@@ -23,5 +23,4 @@ package com.project.custom_classes;
  * @param lineNumber The line number.
  * @param className The name of the class (Including the package).
  */
-public record BreakPoint(int lineNumber, String className) {
-}
+public record BreakPoint(int lineNumber, String className) {}

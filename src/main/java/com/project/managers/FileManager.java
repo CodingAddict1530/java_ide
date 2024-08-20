@@ -17,7 +17,12 @@
 
 package com.project.managers;
 
-import com.project.custom_classes.*;
+import com.project.custom_classes.CustomFile;
+import com.project.custom_classes.CustomTextArea;
+import com.project.custom_classes.BreakPoint;
+import com.project.custom_classes.OpenFile;
+import com.project.custom_classes.OpenFilesTracker;
+import com.project.custom_classes.FileChange;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Tab;
@@ -33,10 +38,10 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.fxmisc.richtext.LineNumberFactory;
 import com.project.utility.MainUtility;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -58,7 +63,7 @@ public class FileManager {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(FileManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(FileManager.class);
 
     /**
      * The TabPane.
@@ -96,6 +101,7 @@ public class FileManager {
 
         // Send didOpen notification to language server.
         JLSManager.didOpen(Paths.get(path), text);
+        JLSManager.sendDidSave(Paths.get(path).toUri().toString(), text);
 
         Tab newTab = new Tab();
         String[] parts = path.split("\\\\");
@@ -199,6 +205,11 @@ public class FileManager {
             tab = tabPane.getSelectionModel().getSelectedItem();
         }
         if (tab != null) {
+            if (Boolean.FALSE.equals(OpenFilesTracker.isSaved(tab))) {
+                if (MainUtility.confirm("This file is not saved!", "Save it?")) {
+                    saveFile(tab);
+                }
+            }
             OpenFile file = OpenFilesTracker.getOpenFile(tab);
             OpenFilesTracker.removeOpenFile(file);
             tabPane.getTabs().remove(tab);
@@ -240,7 +251,7 @@ public class FileManager {
                 headerLabel.setStyle("-fx-text-fill: white");
                 header.getChildren().add(0, headerLabel);
             } else {
-                System.out.println("Error saving file");
+                MainUtility.popup(new Label("Error saving file"));
             }
         }
 
@@ -294,7 +305,7 @@ public class FileManager {
 
         String[] splitName;
 
-        if (!file.exists() || !file.isFile() || !file.canRead() || !file.canWrite()) {
+        if (!file.exists() || !file.isFile() || !file.canRead()) {
             return;
         }
         splitName = file.getName().split("\\.");
@@ -308,7 +319,8 @@ public class FileManager {
         }
 
         // Open a tab for the new file.
-        newTab(file.getPath(), text.toString(), splitName[splitName.length - 1].equals("java"));
+        newTab(file.getPath(), text.toString(), splitName[splitName.length - 1].equals("java") ||
+                (splitName.length > 1 && splitName[splitName.length - 2].equals("build") && splitName[splitName.length - 1].equals("gradle")));
         EditAreaManager.processDiagnostics();
 
     }
@@ -322,6 +334,29 @@ public class FileManager {
         for (int i = 0; i < size; i++) {
             closeFile(tabPane.getTabs().get(0));
         }
+
+    }
+
+    public static void newTextFile(Path parent) {
+
+        // Prompt user to enter a name for the file.
+        String name = MainUtility.quickDialog("New text File", "Enter the name with extension");
+        Path file = new File(parent.toFile(), name).toPath();
+
+        String[] parts = name.split("\\.");
+        if (parts[parts.length - 1].equals("java")) {
+            if (ProjectManager.getCurrentProject() != null &&
+                    !file.startsWith(new File(ProjectManager.getCurrentProject().getPath().toFile(), "src/main/java").toPath())) {
+                MainUtility.popup(new Label("Java files not allowed here"));
+                return;
+            }
+        }
+        if (!writeToFile(file, "", false, false)) {
+            MainUtility.popup(new Label("File already exists, or something..."));
+        }
+
+        // Open a tab for the file.
+        openFile(file);
 
     }
 
@@ -345,7 +380,7 @@ public class FileManager {
 
         // Check whether file is it right place.
         if (!path.startsWith(new File(ProjectManager.getCurrentProject().getPath().toString(), "src\\main\\java").toPath())) {
-            System.out.println("Java Files Not Allowed HERE!");
+            MainUtility.popup(new Label("Java Files Not Allowed HERE!"));
             return;
         }
 
@@ -358,14 +393,14 @@ public class FileManager {
         }
         File file = new File(path.toString(), name + ".java");
         String parentName = path.toFile().getName();
-        String[] parentNameParts = parentName.split("\\\\");
+        String[] parentNameParts = path.toString().split("\\\\");
 
         // Determine the package of the file.
         boolean packageStart = false;
         StringBuilder packageName = new StringBuilder();
         for (String s : parentNameParts) {
             if (packageStart) {
-                packageName.append("s").append(".");
+                packageName.append(s).append(".");
             }
             if (s.equals("java")) {
                 packageStart = true;
@@ -391,12 +426,14 @@ public class FileManager {
         try {
             if (!file.exists()) {
                 Files.write(file.toPath(), content);
+                DirectoryManager.UndoManager.pushUndo(new FileChange(null, file.toPath()));
+                DirectoryManager.UndoManager.clearRedo();
                 logger.info("New Java File Created: {}", file.getPath());
             } else {
-                System.out.println("Java File Already Exists");
+                MainUtility.popup(new Label("This Java File Already Exists"));
             }
         } catch (IOException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
         StringBuilder sb = new StringBuilder();
@@ -486,7 +523,7 @@ public class FileManager {
      * @param path The Path to the file.
      * @param skipConfirm Whether to prompt user to confirm or not.
      */
-    public static void deleteFile(Path path, boolean skipConfirm) {
+    public static void deleteFile(Path path, boolean skipConfirm, boolean skipUndo) {
 
         boolean confirm;
         if (skipConfirm) {
@@ -496,6 +533,7 @@ public class FileManager {
             // Prompt user to confirm.
             confirm = MainUtility.confirm("Delete " + path.getFileName(), "This file will be deleted!");
         }
+
         if (confirm) {
             File file = new File(path.toString());
             if (OpenFilesTracker.getOpenFile(path) != null) {
@@ -504,14 +542,29 @@ public class FileManager {
                 closeFile(OpenFilesTracker.getOpenFile(path).getTab());
             }
             if (file.exists()) {
-                if (file.delete()) {
+                try {
+
+                    // Set up in order to delete the file.
+                    shouldCut.clear();
+                    shouldCut.add(true);
+
+                    // Clear redo stack.
+                    DirectoryManager.UndoManager.clearRedo();
+                    DirectoryManager.moveFile(file.toPath(), new File(DirectoryManager.TRASH.toAbsolutePath().toString(), file.getName()).toPath());
 
                     // Send notification to language server.
                     JLSManager.sendDeletedFile(file.toURI().toString());
+                    if (!skipUndo) {
+
+                        // Push changes onto undo stack.
+                        DirectoryManager.UndoManager.pushUndo(new FileChange(path, null));
+                    }
                     logger.info("Deleted {}", file.getPath());
+                } catch (IOException e) {
+                    logger.error(e.getMessage());
                 }
             } else {
-                System.out.println("File Not Found");
+                MainUtility.popup(new Label("File Not Found"));
             }
         }
 
@@ -576,11 +629,11 @@ public class FileManager {
 
                         // Check whether it is a cut and delete the file if it is.
                         if (!shouldCut.isEmpty() && shouldCut.get(0)) {
-                            deleteFile(potentialFile.toPath(), true);
+                            deleteFile(potentialFile.toPath(), true, false);
                             logger.info("Deleted {} on cut command", potentialFile.getPath());
                         }
                     } else if (potentialFile.isDirectory()) {
-                        System.out.println("Paste dir into file not allowed!");
+                        MainUtility.popup(new Label("Paste directory into file not allowed!"));
                         return;
                     }
                 }
@@ -611,12 +664,26 @@ public class FileManager {
         }
         Path newPath = new File(path.getParent().toString(), newName).toPath();
         try {
+            DirectoryManager.UndoManager.pushUndo(new FileChange(path, newPath));
             Files.move(path, newPath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Send notification to language server.
+            JLSManager.sendDeletedFile(path.toUri().toString());
+
+            // Send didOpen notification to language server.
+            StringBuilder text = new StringBuilder();
+            ArrayList<String> lines = FileManager.readFile(newPath);
+            if (lines != null) {
+                for (String line : lines) {
+                    text.append(line).append("\n");
+                }
+            }
+            JLSManager.didOpen(newPath, text.toString());
+            JLSManager.sendDidSave(newPath.toUri().toString(), text.toString());
             logger.info("Renamed {} to {}", newName, newPath);
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            logger.error(e.getMessage());
         }
-        //ProjectManager.openProject(openProjectPath.get(0));
         if (OpenFilesTracker.getOpenFile(path) != null) {
 
             // Close and open file to have the name change.
@@ -643,7 +710,7 @@ public class FileManager {
             ArrayList<String> returnValue = new ArrayList<>(lines);
             return (returnValue.isEmpty()) ? null : returnValue;
         } catch (IOException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
         return null;
@@ -667,6 +734,15 @@ public class FileManager {
                     return false;
                 }
             }
+
+            // Create parent directories if they don't already exist.
+            if (!path.toFile().getParentFile().exists()) {
+                if (path.toFile().getParentFile().mkdirs()) {
+                    logger.info("Parent directory created for {}", path.toFile().getName());
+                } else {
+                    logger.error("Couldn't create parent directories for {}", path.toString());
+                }
+            }
             if (append) {
                 Files.write(path, List.of(content), StandardOpenOption.APPEND);
                 logger.info("Appended to {}", path.toString());
@@ -675,7 +751,7 @@ public class FileManager {
                 logger.info("Wrote to {}", path.toString());
             }
         } catch (IOException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
             return false;
         }
 

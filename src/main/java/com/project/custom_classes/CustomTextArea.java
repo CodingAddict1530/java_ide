@@ -18,12 +18,15 @@
 package com.project.custom_classes;
 
 import com.project.managers.EditAreaManager;
+import com.project.managers.FileManager;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.*;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.StackPane;
 import org.fxmisc.richtext.CodeArea;
+import java.io.File;
 import java.util.LinkedList;
 import java.util.Objects;
 
@@ -300,6 +303,27 @@ public class CustomTextArea extends CodeArea {
                     EditAreaManager.color(this);
                     break;
 
+                case "<":
+
+                    // Prevent event from propagating any further.
+                    event.consume();
+
+                    // Check whether there is selected text.
+                    if (this.getSelectedText().isEmpty()) {
+
+                        // Autocomplete with a closing generic symbol.
+                        this.replaceText(caretPosition, caretPosition, "<>");
+                        this.moveTo(caretPosition + 1);
+                    } else {
+
+                        // Enclose selected text in Generic symbols.
+                        this.replaceSelection(String.format("<%s>", this.getSelectedText()));
+                    }
+
+                    // Recolor the TextArea.
+                    EditAreaManager.color(this);
+                    break;
+
                 case "\"":
 
                     // Prevent event from propagating any further.
@@ -392,20 +416,45 @@ public class CustomTextArea extends CodeArea {
 
         });
 
-        if (isColored) {
-
-            // Color the TextArea with each key typed.
-            this.setOnKeyTyped(event -> EditAreaManager.color(this));
-        }
-
         // Mirror changes of TextArea to inner TextArea.
-        this.textProperty().addListener((observable, oldValue, newValue) -> this.innerTextArea.replaceText(newValue));
+        this.textProperty().addListener((observable, oldValue, newValue) -> {
+            this.innerTextArea.replaceText(newValue);
+            if (isColored) {
+                EditAreaManager.color(this);
+            }
+        });
 
         // Move caret of inner TextArea with that of the TextArea.
         this.caretPositionProperty().addListener((observable, oldValue, newValue) -> this.innerTextArea.moveTo(newValue));
 
         // Process diagnostics as user scrolls.
-        this.addEventFilter(ScrollEvent.SCROLL, event -> EditAreaManager.processDiagnostics());
+        this.addEventFilter(ScrollEvent.SCROLL, event -> {
+            StackPane stackPane = (StackPane) this.getParent();
+            if (stackPane.getChildren().size() > 1 && ((CustomCanvas) stackPane.getChildren().get(1)).getType().equals("Error")) {
+                stackPane.getChildren().remove(1);
+            }
+            EditAreaManager.processDiagnostics();
+        });
+
+        this.setOnDragOver(event -> {
+            if (event.getGestureSource() != this && event.getDragboard().hasFiles()) {
+                event.acceptTransferModes(TransferMode.COPY);
+            }
+            event.consume();
+        });
+
+        this.setOnDragDropped(event -> {
+            Dragboard dragboard = event.getDragboard();
+            if (dragboard.hasFiles()) {
+                for (File file : dragboard.getFiles()) {
+                    FileManager.openFile(file.toPath());
+                }
+                event.setDropCompleted(true);
+            } else {
+                event.setDropCompleted(false);
+            }
+            event.consume();
+        });
 
     }
 
@@ -562,6 +611,14 @@ public class CustomTextArea extends CodeArea {
     public TextAreaChange popRedo() {
 
         return this.redoStack.pollLast();
+    }
+
+    /**
+     * Removes all entries on the redo stack.
+     */
+    public void clearRedo() {
+
+        this.redoStack.clear();
     }
 
 }

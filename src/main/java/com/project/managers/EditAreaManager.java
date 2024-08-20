@@ -17,9 +17,14 @@
 
 package com.project.managers;
 
-import com.project.custom_classes.*;
+import com.project.custom_classes.CustomTextArea;
+import com.project.custom_classes.diff_match_patch;
+import com.project.custom_classes.TextAreaChange;
+import com.project.custom_classes.OpenFile;
+import com.project.custom_classes.OpenFilesTracker;
+import com.project.custom_classes.CustomCanvas;
+import com.project.utility.DatabaseUtility;
 import com.project.utility.MainUtility;
-import com.project.utility.SettingsUtility;
 import com.sun.jdi.Location;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -27,25 +32,53 @@ import javafx.application.Platform;
 import javafx.event.EventHandler;
 import javafx.geometry.Point2D;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.*;
-import javafx.scene.input.*;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Button;
+import javafx.scene.control.Tooltip;
+import javafx.scene.control.Label;
+import javafx.scene.control.Tab;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.ScrollEvent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import org.eclipse.lsp4j.CompletionItem;
-import org.eclipse.lsp4j.SignatureHelp;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.MarkedString;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.fxmisc.richtext.event.MouseOverTextEvent;
+import org.fxmisc.richtext.model.StyleSpan;
 import org.fxmisc.richtext.model.StyleSpansBuilder;
-
+import org.fxmisc.richtext.model.TwoDimensional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.LinkedList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -54,6 +87,11 @@ import java.util.regex.Pattern;
  * Handles Edit area operations.
  */
 public class EditAreaManager {
+
+    /**
+     * The logger for the class.
+     */
+    private static final Logger logger = LoggerFactory.getLogger(EditAreaManager.class);
 
     /**
      * A list of the keywords.
@@ -159,8 +197,14 @@ public class EditAreaManager {
      */
     private static final Map<Tab, Integer> currentVersions = new HashMap<>();
 
-    private static final Map<Diagnostic, Path> diagnostics = new HashMap<>();
+    /**
+     * Holds all pending diagnostics.
+     */
+    private static final Map<Diagnostic, Path> diagnostics = new ConcurrentHashMap<>();
 
+    /**
+     * An EventHandler to detect scrolling while in debug mode and move the highlight accordingly.
+     */
     private static EventHandler<ScrollEvent> scrollEV;
 
     /**
@@ -192,13 +236,7 @@ public class EditAreaManager {
 
             // If change wasn't cause by undo or redo, empty the redo stack (LinkedList).
             if (!isRedo && !isUndo && textArea.popRedo() != null) {
-
-                // Use a different thread to avoid blocking JavaFX thread when the stack has
-                // a lot of entries.
-                new Thread(() -> {
-                    while (textArea.popRedo() != null) {
-                    }
-                }).start();
+                textArea.clearRedo();
             }
 
             // Check whether it is an undo action. This will be ignored.
@@ -260,8 +298,8 @@ public class EditAreaManager {
                 JLSManager.didChange(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), newValue, currentVersions.get(tab));
 
                 // Start new thread to avoid blocking main thread during communication with server.
-                new Thread(() -> {
-                    if (textArea.getCaretPosition() > 0) {
+                Thread completionThread = new Thread(() -> {
+                    if (textArea.getInnerTextArea().getCaretPosition() > 0) {
                         List<CompletionItem> items = null;
                         char currentChar = textArea.getInnerTextArea().getText().charAt(textArea.getInnerTextArea().getCaretPosition() - 1);
 
@@ -269,7 +307,7 @@ public class EditAreaManager {
                         if (sHelpTriggers.contains(currentChar)) {
 
                             // If so request signature help from server.
-                            SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
+                            //SignatureHelp s = JLSManager.getSignatureHelp(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, null));
                         } // Check whether the input character is a completion trigger character.
                         else if (completionTriggers.contains(currentChar) || Character.isAlphabetic(currentChar)) {
 
@@ -306,7 +344,9 @@ public class EditAreaManager {
                         }
 
                     }
-                }).start();
+                });
+                completionThread.setDaemon(true);
+                completionThread.start();
 
                 // Check whether file was saved before, and mark it as unsaved.
                 if (Boolean.TRUE.equals(OpenFilesTracker.isSaved(tab))) {
@@ -341,7 +381,7 @@ public class EditAreaManager {
             if (index > 0 && index < textArea.getLength()) {
 
                 // Run on new thread to avoid blocking the main thread during server interactions.
-                new Thread(() -> {
+                Thread hoverThread = new Thread(() -> {
 
                     // Request for a Hover object from the server.
                     Hover hoverResult = JLSManager.getHover(OpenFilesTracker.getOpenFile(tab).getFile().toPath(), getPosition(textArea, index));
@@ -362,7 +402,9 @@ public class EditAreaManager {
                             }
                         }
                     }
-                }).start();
+                });
+                hoverThread.setDaemon(true);
+                hoverThread.start();
             }
 
         });
@@ -524,7 +566,7 @@ public class EditAreaManager {
     public static void color(CustomTextArea textArea) {
 
         // Run on different thread since the operation might block the main thread.
-        new Thread(() -> {
+        Thread colorThread = new Thread(() -> {
 
             String text = textArea.getText();
             Matcher matcher = PATTERN.matcher(text);
@@ -560,7 +602,9 @@ public class EditAreaManager {
             // Run UI updates on JavaFX Thread.
             Platform.runLater(() -> textArea.setStyleSpans(0, spansBuilder.create()));
 
-        }).start();
+        });
+        colorThread.setDaemon(true);
+        colorThread.start();
 
     }
 
@@ -631,10 +675,44 @@ public class EditAreaManager {
     }
 
     /**
+     * Adds an import statement into the code.
+     *
+     * @param textArea The CustomTextArea.
+     * @param packageName The module to import.
+     */
+    public static void addImport(CustomTextArea textArea, String packageName) {
+
+        // Determines the start of the styleSpan being examined.
+        int start = 0;
+
+        // Whether the package keyword was found as the first non comment word.
+        boolean found = false;
+
+        // Loop till no comment.
+        for (StyleSpan<Collection<String>> styleSpan : textArea.getStyleSpans(0, textArea.getText().length())) {
+            if (!styleSpan.getStyle().contains("comment")) {
+                if (textArea.getText().substring(start, styleSpan.getLength()).equals("package")) {
+                    found = true;
+                    int line = textArea.offsetToPosition(start, TwoDimensional.Bias.Forward).getMajor();
+                    int startPos = textArea.position(line + 1, 0).toOffset();
+                    textArea.replaceText(startPos, startPos, "\n\nimport " + packageName + ";\n");
+                }
+                break;
+            }
+            start += styleSpan.getLength();
+        }
+        if (!found) {
+            textArea.replaceText(0, 0, "import " + packageName + ";\n");
+        }
+
+    }
+
+    /**
      * Processes the diagnostics of the file open in the selected tab.
      */
     public static void processDiagnostics() {
 
+        AtomicBoolean hide = new AtomicBoolean(false);
         for (Diagnostic diagnostic : diagnostics.keySet()) {
             Tab tab = null;
 
@@ -661,30 +739,120 @@ public class EditAreaManager {
             int endChar = diagnostic.getRange().getEnd().getCharacter();
             CustomTextArea textArea = (CustomTextArea) ((StackPane) tab.getContent()).getChildren().get(0);
 
+            ArrayList<String> packageNames = new ArrayList<>();
+
+            // If the error message says a class can't be resolved. Try to find it.
+            if (diagnostic.getMessage().endsWith("cannot be resolved to a type") ||
+                    diagnostic.getMessage().endsWith("cannot be resolved")) {
+
+                // Find the source file.
+                Connection conn = DatabaseUtility.connect();
+                try (ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT qualifiedName, path FROM ClassMetaData " +
+                        "WHERE className = ?", diagnostic.getMessage().split(" ")[0])) {
+                    while (rs.next()) {
+
+                        // Remove the entry if the file no longer exists.
+                        if (!Paths.get(rs.getString("path")).toFile().exists()) {
+                            DatabaseUtility.executeUpdate(conn, "DELETE FROM ClassMetaData WHERE className = ? AND path = ?", diagnostic.getMessage().split(" ")[0], rs.getString("path"));
+                            continue;
+                        }
+                        packageNames.add(rs.getString("qualifiedName").replace('$', '.'));
+                    }
+                } catch (SQLException e) {
+                    logger.error(e.getMessage());
+                } finally {
+                    DatabaseUtility.close(conn);
+                }
+
+            }
+
             Tooltip tooltip = new Tooltip(diagnostic.getMessage());
+
+            // If any classes were found for missing imports, help user to import.
+            if (!packageNames.isEmpty()) {
+                GridPane gridPane = new GridPane();
+                gridPane.setStyle("-fx-background: black;-fx-fill: white");
+                Label message = new Label(diagnostic.getMessage());
+                message.setStyle("-fx-font-size: 11px;");
+                gridPane.add(message, 0, 0);
+                Label importClass = new Label("import class");
+                importClass.getStyleClass().add("import-class");
+                Tooltip finalTooltip1 = tooltip;
+                importClass.setOnMouseClicked(event -> {
+
+                    // If more than one class was found, prompt user to pick one.
+                    // Otherwise, import what was found.
+                    if (packageNames.size() > 1) {
+                        Tooltip importSuggestions = new Tooltip();
+                        GridPane gp = new GridPane();
+                        gp.setStyle("-fx-background: black;-fx-fill: white");
+                        for (int i = 0; i < packageNames.size(); i++) {
+                            Label label = new Label(packageNames.get(i));
+                            label.getStyleClass().add("import-class");
+                            label.addEventHandler(MouseEvent.MOUSE_CLICKED, event2 -> {
+
+                                // Import the class when clicked.
+                                addImport(textArea, label.getText());
+
+                                if (importSuggestions.isShowing()) {
+                                    importSuggestions.hide();
+                                }
+                                if (finalTooltip1.isShowing()) {
+                                    finalTooltip1.hide();
+                                }
+
+                            });
+                            gp.add(label, 0, i);
+                        }
+                        importSuggestions.setGraphic(gp);
+                        importSuggestions.show(textArea.getScene().getWindow());
+
+                        // Auto hide the toolTip after 6 seconds.
+                        new Timeline(new KeyFrame(
+                                javafx.util.Duration.millis(4000),
+                                event2 -> importSuggestions.hide()
+                        )).play();
+
+                    } else {
+                        addImport(textArea, packageNames.get(0));
+                        finalTooltip1.hide();
+                    }
+
+                });
+                gridPane.add(importClass, 0, 1);
+                tooltip = new Tooltip();
+                tooltip.setGraphic(gridPane);
+                hide.set(false);
+            }
+
 
             // Add event handler for showing the Tooltip
             int finalStart = textArea.getAbsolutePosition(startLine, startChar);
             int finalEnd = textArea.getAbsolutePosition(endLine, endChar);
-            final CustomTextArea[] textAreaArray = new CustomTextArea[] {textArea};
+            final CustomTextArea[] textAreaArray = new CustomTextArea[]{textArea};
+            Tooltip finalTooltip = tooltip;
             mouseEvents.add(event -> {
                 int index = textAreaArray[0].hit(event.getX(), event.getY()).getCharacterIndex().orElse(-1);
                 if (index >= finalStart && index < finalEnd) {
-                    if (!tooltip.isShowing()) {
-                        tooltip.show(textAreaArray[0], event.getScreenX(), event.getScreenY() + 10);
+                    if (!finalTooltip.isShowing()) {
+                        Platform.runLater(() -> finalTooltip.show(textAreaArray[0], event.getScreenX(), event.getScreenY() + 10));
                     }
                 } else {
-                    tooltip.hide();
+                    if (hide.get()) {
+                        hide.set(true);
+                        finalTooltip.hide();
+                    }
                 }
                 new Timeline(new KeyFrame(
-                        javafx.util.Duration.millis(4000),
-                        event2 -> tooltip.hide()
+                        javafx.util.Duration.millis(6000),
+                        event2 -> finalTooltip.hide()
                 )).play();
             });
             textArea.addEventHandler(MouseEvent.MOUSE_MOVED, mouseEvents.get(mouseEvents.size() - 1));
 
             // Check whether server is pointing to an unused variable.
-            if (diagnostic.getMessage().startsWith("The value of") && diagnostic.getMessage().endsWith("is not used")) {
+            if ((diagnostic.getMessage().startsWith("The value of") && diagnostic.getMessage().endsWith("is not used")) ||
+                    diagnostic.getMessage().endsWith("is never used")) {
 
                 // Simply color it and move to next diagnostic.
                 textArea.setStyleClass(textArea.position(startLine, startChar).toOffset(),
@@ -742,7 +910,7 @@ public class EditAreaManager {
 
             // Loop through the width while zigzagging.
             boolean down = true;
-            for (double x = startX; x < endX; x+=2) {
+            for (double x = startX; x < endX; x += 2) {
                 if (down) {
                     gc.lineTo(x, startY + 0);
                     down = false;
@@ -815,24 +983,33 @@ public class EditAreaManager {
 
         String className = location.declaringType().name();
         int lineNumber = location.lineNumber();
-        String[] parts = className.split("\\.");
         Path path = null;
 
         // Find the source file.
-        for (int i = parts.length - 1; i >= 0; i--) {
-            Optional<Path> optionalPath = DirectoryManager.findFile(parts[i], null);
-            if (optionalPath == null || optionalPath.isEmpty()) {
-                if (SettingsUtility.getJavaPath() != null) {
-                    optionalPath = DirectoryManager.findFile(parts[i],
-                            Paths.get("src/main/files/src"));
-                }
+        Connection conn = DatabaseUtility.connect();
+        if (conn == null) {
+            logger.error("Could not connect to database");
+            return false;
+        }
+        try (ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT path FROM ClassMetaData " +
+                "WHERE qualifiedName = ? LIMIT 1", className)) {
+            path = Paths.get(rs.getString("path"));
+
+            // Remove entry if the file no longer exists.
+            if (!path.toFile().exists()) {
+                DatabaseUtility.executeUpdate(conn, "DELETE FROM ClassMetaData WHERE qualifiedName = ?", className);
+                path = null;
             }
-            if (optionalPath != null && optionalPath.isPresent()) {
-                path = optionalPath.get();
-                break;
-            }
+        } catch (SQLException e) {
+            logger.error(e.getMessage());
+        } catch (InvalidPathException e) {
+            path = null;
+            logger.error(e.getMessage());
+        } finally {
+            DatabaseUtility.close(conn);
         }
         if (path == null) {
+            logger.error("Couldn't find {}", className);
             return false;
         }
         Path finalPath = path;
@@ -845,12 +1022,7 @@ public class EditAreaManager {
         // UI changes on JavaFX Thread.
         Platform.runLater(() -> {
 
-            OpenFile file = OpenFilesTracker.getOpenFile(finalPath);
-            if (file == null) {
-
-                // Open the file if it is not already open.
-                FileManager.openFile(finalPath);
-            }
+            FileManager.openFile(finalPath);
             textArea[0] = (CustomTextArea) ((StackPane) OpenFilesTracker.getOpenFile(finalPath).getTab().getContent()).getChildren().get(0);
 
             // Get the absolute position in the TextArea of the line.

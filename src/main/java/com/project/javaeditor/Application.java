@@ -20,9 +20,11 @@ package com.project.javaeditor;
 import com.project.managers.JLSManager;
 import com.project.utility.MainUtility;
 import com.project.utility.ProjectWatcher;
+import javafx.application.Platform;
 import javafx.stage.Stage;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -33,7 +35,7 @@ public class Application extends javafx.application.Application {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(Application.class);
+    private static final Logger logger = LoggerFactory.getLogger(Application.class);
 
     /**
      * Stores whether the project has fully initialized or not.
@@ -66,9 +68,11 @@ public class Application extends javafx.application.Application {
     @Override
     public void start(Stage stage) {
 
+        Platform.setImplicitExit(true);
         primaryStage = stage;
         logger.info("Application started");
         ApplicationView.setStage(stage);
+        MainUtility.setStage(stage);
 
         // Start the language server.
         ApplicationModel.startServer();
@@ -83,14 +87,16 @@ public class Application extends javafx.application.Application {
         }
         stage.show();
         isInitialized = true;
-        stage.setOnCloseRequest(event -> ApplicationView.checkForUnsavedFiles());
 
         logger.info("Application setup complete");
 
+        // Watch server logs and recycle them.
+        ProjectWatcher.watchServerLogs();
+
         // Keep checking if WatchService is not idle and stop it.
-        new Thread(()-> {
+        Thread thread = new Thread(()-> {
             while (keepChecking.get()) {
-                if (ProjectWatcher.getIsWatching()) {
+                if (ProjectWatcher.getIsWatching().get()) {
                     if (ProjectWatcher.getWatchKeyMap().isEmpty()) {
                         ProjectWatcher.stopWatching();
                     }
@@ -100,10 +106,12 @@ public class Application extends javafx.application.Application {
                     // Wait 2 seconds before checking again.
                     Thread.sleep(2000);
                 } catch (Exception e) {
-                    logger.error(e);
+                    logger.error(e.getMessage());
                 }
             }
-        }).start();
+        });
+        thread.setDaemon(true);
+        thread.start();
 
     }
 
@@ -132,6 +140,7 @@ public class Application extends javafx.application.Application {
 
         // Stop language server.
         ApplicationModel.stopServer();
+        ApplicationModel.cleanTrash();
         logger.info("Application cleanup complete");
 
     }

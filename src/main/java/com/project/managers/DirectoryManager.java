@@ -21,31 +21,46 @@ import com.project.custom_classes.CustomTreeItem;
 import com.project.custom_classes.RootTreeNode;
 import com.project.custom_classes.DirectoryTreeNode;
 import com.project.custom_classes.FileTreeNode;
-import com.project.custom_classes.CustomTreeLabel;
 import com.project.custom_classes.TreeNode;
+import com.project.custom_classes.CustomTreeLabel;
+import com.project.custom_classes.FileChange;
 import javafx.geometry.Pos;
-import javafx.scene.control.TabPane;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.Menu;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.TreeCell;
+import javafx.scene.control.Label;
 import javafx.scene.control.ContextMenu;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuItem;
+import javafx.scene.control.TabPane;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import com.project.utility.MainUtility;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Paths;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.FileVisitResult;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.DirectoryStream;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Objects;
+import java.util.Map;
+import java.util.ArrayList;
+import java.util.LinkedList;
 
 /**
  * Handles directory related operations.
@@ -55,7 +70,12 @@ public class DirectoryManager {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(DirectoryManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(DirectoryManager.class);
+
+    /**
+     * The Path to the temporary storage of deleted files.
+     */
+    public static final Path TRASH = Paths.get(".trash");
 
     /**
      * Stores a CustomTreeItem and whether is it open or closed.
@@ -193,7 +213,7 @@ public class DirectoryManager {
 
             });
         } catch (IOException | SecurityException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
         }
 
         return rootDirectory;
@@ -267,6 +287,29 @@ public class DirectoryManager {
                     ContextMenu contextMenu = new ContextMenu();
                     contextMenu.getStyleClass().add("context-menu");
                     if (path.toFile().isDirectory()) {
+
+                        // Allow drag and drop.
+                        setOnDragOver(event -> {
+                            if (event.getGestureSource() != this && event.getDragboard().hasFiles()) {
+                                event.acceptTransferModes(TransferMode.COPY);
+                            }
+                            event.consume();
+                        });
+
+                        setOnDragDropped(event -> {
+                            Dragboard dragboard = event.getDragboard();
+                            if (dragboard.hasFiles()) {
+                                for (File file : dragboard.getFiles()) {
+                                    FileManager.copyFile(file.toPath());
+                                    DirectoryManager.pasteIntoDirectory(path);
+                                }
+                                event.setDropCompleted(true);
+                            } else {
+                                event.setDropCompleted(false);
+                            }
+                            event.consume();
+                        });
+
                         Menu newItem = new Menu("New");
 
                         Menu fileItem = new Menu("Java File");
@@ -290,7 +333,10 @@ public class DirectoryManager {
                         MenuItem packageItem = new MenuItem("Package");
                         packageItem.setOnAction(event -> newPackage(path));
 
-                        newItem.getItems().addAll(fileItem, packageItem);
+                        MenuItem textFileItem = new MenuItem("Text File");
+                        textFileItem.setOnAction(event -> FileManager.newTextFile(path));
+
+                        newItem.getItems().addAll(fileItem, packageItem, textFileItem);
 
                         MenuItem deleteItem = new MenuItem("Delete");
                         deleteItem.setOnAction(event -> DirectoryManager.deleteDirectory(path));
@@ -305,7 +351,7 @@ public class DirectoryManager {
                         contextMenu.getItems().addAll(newItem, deleteItem, cutItem, copyItem, pasteItem, renameItem);
                     } else {
                         MenuItem deleteItem = new MenuItem("Delete");
-                        deleteItem.setOnAction(event -> FileManager.deleteFile(path, false));
+                        deleteItem.setOnAction(event -> FileManager.deleteFile(path, false, false));
                         MenuItem cutItem = new MenuItem("Cut");
                         cutItem.setOnAction(event -> FileManager.cutFile(path, true));
                         MenuItem copyItem = new MenuItem("Copy");
@@ -321,6 +367,50 @@ public class DirectoryManager {
                 }
             }
 
+        });
+
+        // Detect different key presses and act accordingly.
+        treeView.addEventHandler(KeyEvent.KEY_PRESSED, event -> {
+            CustomTreeItem<HBox> selectedItem;
+            switch (event.getCode()) {
+                case DELETE:
+                    selectedItem = (CustomTreeItem<HBox>) treeView.getSelectionModel().getSelectedItem();
+                    if (selectedItem != null) {
+                        FileManager.deleteFile(selectedItem.getPath(), false, false);
+                    }
+                    break;
+                case C:
+                    if (event.isControlDown()) {
+                        selectedItem = (CustomTreeItem<HBox>) treeView.getSelectionModel().getSelectedItem();
+                        if (selectedItem != null) {
+                            FileManager.copyFile(selectedItem.getPath());
+                        }
+                    }
+                    break;
+                case X:
+                    if (event.isControlDown()) {
+                        selectedItem = (CustomTreeItem<HBox>) treeView.getSelectionModel().getSelectedItem();
+                        if (selectedItem != null) {
+                            FileManager.cutFile(selectedItem.getPath(), true);
+                        }
+                    }
+                    break;
+                case V:
+                    if (event.isControlDown()) {
+                        selectedItem = (CustomTreeItem<HBox>) treeView.getSelectionModel().getSelectedItem();
+                        if (selectedItem != null) {
+                            DirectoryManager.pasteIntoDirectory(selectedItem.getPath());
+                        }
+                    }
+                    break;
+                case Z:
+                    if (event.isControlDown()  && event.isShiftDown()) {
+                        redo();
+                    } else if (event.isControlDown()) {
+                        undo();
+                    }
+                    break;
+            }
         });
         return treeView;
 
@@ -431,10 +521,14 @@ public class DirectoryManager {
         File dir = new File(path.toString(), name);
         if (!dir.exists()) {
             if (dir.mkdir()) {
+
+                // Push the change onto the undo stack.
+                UndoManager.pushUndo(new FileChange(null, dir.toPath()));
+                DirectoryManager.UndoManager.clearRedo();
                 logger.info("Package {} created", dir.getName());
             }
         } else {
-            System.out.println("Package already exists");
+            MainUtility.popup(new Label("Package already exists"));
         }
 
     }
@@ -451,10 +545,18 @@ public class DirectoryManager {
         if (confirm) {
             File dir = new File(path.toString());
             try {
-                recursiveDelete(dir.toPath());
+
+                // Enable cutting to have the file deleted.
+                shouldCut.clear();
+                shouldCut.add(true);
+
+                // Push the change onto the redo stack.
+                UndoManager.pushUndo(new FileChange(dir.toPath(), null));
+                DirectoryManager.UndoManager.clearRedo();
+                moveFile(dir.toPath(), new File(TRASH.toAbsolutePath().toString(), dir.getName()).toPath());
                 logger.info("Directory {} deleted", dir.getName());
             } catch (IOException e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
         }
 
@@ -487,12 +589,18 @@ public class DirectoryManager {
      */
     public static void pasteIntoDirectory(Path path) {
 
-        // Check if there is a String in the clipboard (A path).
-        if (clipboard.hasString()) {
-            String content = clipboard.getString();
-            File potentialFile = new File(content);
+        // Check if there is a String in the clipboard (A path) or a file.
+        if (clipboard.hasString() || clipboard.hasFiles()) {
+            File potentialFile;
+            if (clipboard.hasString()) {
+                String content = clipboard.getString();
+                potentialFile = new File(content);
+            } else {
+                potentialFile = clipboard.getFiles().get(0);
+            }
 
-            // Check whether the string is indeed a legit path.
+
+            // Check whether the string is indeed a legit path or the path exists.
             if (!potentialFile.exists()) {
                 return;
             }
@@ -502,25 +610,67 @@ public class DirectoryManager {
                     !MainUtility.confirm("File or directory already exists", "This file is already exists, overwriting it?")) {
                     return;
                 }
-                // Check whether it was a cut or copy.
-                if (shouldCut.get(0)) {
-                    Files.move(potentialFile.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                    logger.info("{} moved to {}", potentialFile.getName(), newFile.getName());
-                } else {
-                    ArrayList<String> newContent = FileManager.readFile(potentialFile.toPath());
-                    if (newContent == null) {
-                        if (newFile.mkdir()) {
-                            logger.info("{} created", newFile.getName());
-                        }
-                    } else {
-                        Files.write(newFile.toPath(), newContent);
-                        logger.info("{} created", newFile.getName());
-                    }
-                }
+
+                // Push changes onto the undo stack.
+                UndoManager.pushUndo(new FileChange(potentialFile.toPath(), newFile.toPath()));
+                moveFile(potentialFile.toPath(), newFile.toPath());
+
             } catch (IOException e) {
-                logger.error(e);
+                logger.error(e.getMessage());
             }
         }
+
+    }
+
+    /**
+     * Moves a whole directory from one location to another.
+     * Can move a file as well.
+     *
+     * @param oldFile The old Path of the file/directory.
+     * @param newFile The new Path to the file/directory.
+     * @throws IOException When something goes wrong during the IO processes.
+     */
+    public static void moveFile(Path oldFile, Path newFile) throws IOException {
+
+        Files.walkFileTree(oldFile, new SimpleFileVisitor<>() {
+
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+
+                // Resolve a path in the new directory and create the directory if it doesn't exist.
+                Path targetPath = newFile.resolve(oldFile.relativize(dir));
+                if (!Files.exists(targetPath)) {
+                    Files.createDirectories(targetPath);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+
+                // Create the parent directory if it doesn't exist.
+                if (Files.notExists(newFile.getParent())) {
+                    Files.createDirectories(newFile.getParent());
+                }
+                if (!shouldCut.isEmpty() && shouldCut.get(0)) {
+                    Files.move(file, newFile.resolve(oldFile.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    Files.copy(file, newFile.resolve(oldFile.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path file, IOException exc) throws IOException {
+                if (!shouldCut.isEmpty() && shouldCut.get(0)) {
+                    Files.delete(file);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+        });
+        shouldCut.clear();
+        logger.info("{} moved/copied to {}", oldFile.toFile(), newFile);
 
     }
 
@@ -551,67 +701,6 @@ public class DirectoryManager {
             }
         }
         Files.delete(path);
-
-    }
-
-    /**
-     * Walks through a directories contents looking for a file.
-     *
-     * @param className The name of the class to look for.
-     * @param startDir The directory to start searching from.
-     * @return The file if any.
-     */
-    public static Optional<Path> findFile(String className, Path startDir) {
-
-
-        // Check if the file in not in the cache already.
-        ArrayList<String> cachedData =  FileManager.readFile(CACHE.toPath());
-        if (cachedData != null) {
-            for (String data : cachedData) {
-                if (data.split("\u001F")[1].endsWith(className + ".java")) {
-                    return Optional.of(Paths.get(data.split("\u001F")[0]));
-                }
-            }
-        }
-        long startTime = 0;
-        long endTime = 0;
-        if (startDir == null) {
-            startDir = Paths.get(ProjectManager.getCurrentProject().getPath() + "/src/main/java");
-        }
-
-        // final array to be able to use it in a lambda.
-        final Optional<Path>[] foundFile = new Optional[1];
-        try {
-            startTime = System.currentTimeMillis();
-            Files.walkFileTree(startDir, new SimpleFileVisitor<>() {
-
-                @Override
-                public FileVisitResult visitFile(Path filePath, BasicFileAttributes attrs) {
-
-                    if (filePath.getFileName().toString().endsWith(className + ".java")) {
-                        foundFile[0] = Optional.of(filePath);
-                        return FileVisitResult.TERMINATE; // Stop searching once the file is found
-                    }
-                    return FileVisitResult.CONTINUE;
-
-                }
-
-            });
-            endTime = System.currentTimeMillis();
-        } catch (IOException | SecurityException e) {
-            logger.error(e);
-        }
-
-        // Check whether the search time exceeded the threshold.
-        if (endTime - startTime > 100) {
-            if (foundFile[0].isPresent()) {
-
-                // Store the path to the file and the name.
-                // Using delimiter '\u001F' since it is very uncommon (Not even a printable character).
-                FileManager.writeToFile(CACHE.toPath(), foundFile[0].get() + "\u001F" + className, false, true);
-            }
-        }
-        return foundFile[0];
 
     }
 
@@ -673,6 +762,220 @@ public class DirectoryManager {
     public static void setShouldCut(ArrayList<Boolean> shouldCut) {
 
         DirectoryManager.shouldCut = shouldCut;
+    }
+
+    /**
+     * Undoes delete, create or rename actions on the project files.
+     */
+    public static void undo() {
+
+        // Get most recent change.
+        FileChange previous = UndoManager.popUndo();
+        try {
+            if (previous != null) {
+                if (previous.oldPath() == null) {
+
+                    // Push change on redo stack to enable redo operations.
+                    UndoManager.pushRedo(new FileChange(previous.newPath(), null));
+
+                    // Set should cut to delete the file.
+                    shouldCut.clear();
+                    shouldCut.add(true);
+                    moveFile(previous.newPath(), new File(TRASH.toAbsolutePath().toString(), previous.newPath().toFile().getName()).toPath());
+
+                    // Send notification to language server.
+                    JLSManager.sendDeletedFile(previous.newPath().toUri().toString());
+                } else if (previous.newPath() == null) {
+
+                    // Set should cut to delete the file.
+                    shouldCut.clear();
+                    shouldCut.add(true);
+                    moveFile(new File(TRASH.toAbsolutePath().toString(), previous.oldPath().toFile().getName()).toPath(), previous.oldPath());
+
+                    // Send didOpen notification to language server.
+                    StringBuilder text = new StringBuilder();
+                    ArrayList<String> lines = FileManager.readFile(previous.oldPath());
+                    if (lines != null) {
+                        for (String line : lines) {
+                            text.append(line).append("\n");
+                        }
+                    }
+                    JLSManager.didOpen(previous.oldPath(), text.toString());
+                    JLSManager.sendDidSave(previous.oldPath().toUri().toString(), text.toString());
+
+                    // Push change on redo stack to enable redo operations.
+                    UndoManager.pushRedo(new FileChange(null, previous.oldPath()));
+                } else {
+                    Files.move(previous.newPath(), previous.oldPath());
+
+                    // Send notification to language server.
+                    JLSManager.sendDeletedFile(previous.newPath().toUri().toString());
+
+                    // Send didOpen notification to language server.
+                    StringBuilder text = new StringBuilder();
+                    ArrayList<String> lines = FileManager.readFile(previous.oldPath());
+                    if (lines != null) {
+                        for (String line : lines) {
+                            text.append(line).append("\n");
+                        }
+                    }
+                    JLSManager.didOpen(previous.oldPath(), text.toString());
+                    JLSManager.sendDidSave(previous.oldPath().toUri().toString(), text.toString());
+
+                    // Push change on redo stack to enable redo operations.
+                    UndoManager.pushRedo(new FileChange(previous.newPath(), previous.oldPath()));
+                }
+            }
+        } catch (IOException e) {
+            logger.error(e.getMessage());
+        }
+
+    }
+
+    /**
+     * Redoes delete, create or rename actions on the project files.
+     */
+    public static void redo() {
+
+        // Get most recent change.
+        FileChange previous = UndoManager.popRedo();
+        try {
+            if (previous != null) {
+                if (previous.oldPath() == null) {
+
+                    // Set should cut to delete the file.
+                    shouldCut.clear();
+                    shouldCut.add(true);
+
+                    // Get most recent change.
+                    UndoManager.pushUndo(new FileChange(previous.newPath(), null));
+                    moveFile(previous.newPath(), new File(TRASH.toAbsolutePath().toString(), previous.newPath().toFile().getName()).toPath());
+
+                    // Send notification to language server.
+                    JLSManager.sendDeletedFile(previous.newPath().toUri().toString());
+                } else if (previous.newPath() == null) {
+
+                    // Set should cut to delete the file.
+                    shouldCut.clear();
+                    shouldCut.add(true);
+
+                    moveFile(new File(TRASH.toAbsolutePath().toString(), previous.oldPath().toFile().getName()).toPath(), previous.oldPath());
+
+                    // Send didOpen notification to language server.
+                    StringBuilder text = new StringBuilder();
+                    ArrayList<String> lines = FileManager.readFile(previous.oldPath());
+                    if (lines != null) {
+                        for (String line : lines) {
+                            text.append(line).append("\n");
+                        }
+                    }
+                    JLSManager.didOpen(previous.oldPath(), text.toString());
+                    JLSManager.sendDidSave(previous.oldPath().toUri().toString(), text.toString());
+
+                    // Get most recent change.
+                    UndoManager.pushUndo(new FileChange(null, previous.oldPath()));
+                } else {
+                    Files.move(previous.newPath(), previous.oldPath());
+
+                    // Send notification to language server.
+                    JLSManager.sendDeletedFile(previous.newPath().toUri().toString());
+
+                    // Send didOpen notification to language server.
+                    StringBuilder text = new StringBuilder();
+                    ArrayList<String> lines = FileManager.readFile(previous.oldPath());
+                    if (lines != null) {
+                        for (String line : lines) {
+                            text.append(line).append("\n");
+                        }
+                    }
+                    JLSManager.didOpen(previous.oldPath(), text.toString());
+                    JLSManager.sendDidSave(previous.oldPath().toUri().toString(), text.toString());
+
+                    // Get most recent change.
+                    UndoManager.pushUndo(new FileChange(previous.newPath(), previous.oldPath()));
+                }
+            }
+        } catch (IOException e) {
+            logger.error(e.getMessage());
+        }
+
+    }
+
+    /**
+     * Manages undo and redo operations for files.
+     */
+    public static class UndoManager {
+
+        /**
+         * Maximum number of redo and undo entries each.
+         */
+        private static final int MAX_UNDO_REDO_ENTRIES = 100;
+
+        /**
+         * A Stack (implemented as LinkedList) for undo operations.
+         */
+        private static final LinkedList<FileChange> undoStack = new LinkedList<>();
+
+        /**
+         * A Stack (implemented as LinkedList) for redo operations.
+         */
+        private static final LinkedList<FileChange> redoStack = new LinkedList<>();
+
+        /**
+         * Add an entry to the end of the undo stack.
+         *
+         * @param change The change in text.
+         */
+        public static void pushUndo(FileChange change) {
+
+            undoStack.addLast(change);
+            if (undoStack.size() > MAX_UNDO_REDO_ENTRIES) {
+                undoStack.removeFirst();
+            }
+        }
+
+        /**
+         * Remove the last entry in the undo stack.
+         *
+         * @return The change.
+         */
+        public static FileChange popUndo() {
+
+            return undoStack.pollLast();
+        }
+
+        /**
+         * Add an entry to the end of the redo stack.
+         *
+         * @param change The change in text.
+         */
+        public static void pushRedo(FileChange change) {
+
+            redoStack.addLast(change);
+            if (redoStack.size() > MAX_UNDO_REDO_ENTRIES) {
+                redoStack.removeFirst();
+            }
+        }
+
+        /**
+         * Remove the last entry in the redo stack.
+         *
+         * @return The change.
+         */
+        public static FileChange popRedo() {
+
+            return redoStack.pollLast();
+        }
+
+        /**
+         * Removes all entries on the undo stack.
+         */
+        public static void clearRedo() {
+
+            redoStack.clear();
+        }
+
+
     }
 
 }

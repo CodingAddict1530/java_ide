@@ -24,10 +24,11 @@ import com.project.utility.MainUtility;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -40,7 +41,7 @@ public class ApplicationView {
     /**
      * The logger for the class.
      */
-    private static final Logger logger = LogManager.getLogger(ApplicationView.class);
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationView.class);
 
     /**
      * The primary stage.
@@ -65,10 +66,11 @@ public class ApplicationView {
             stage.setTitle("Fusion IDE");
             stage.setScene(scene);
             stage.setMaximized(true);
+            stage.getIcons().add(new Image(Objects.requireNonNull(application.getResource("icons/icon.png")).toExternalForm()));
             ApplicationModel.setUp(fxmlLoader);
             return fxmlLoader.getController();
         } catch (IOException e) {
-            logger.error(e);
+            logger.error(e.getMessage());
             return null;
         }
 
