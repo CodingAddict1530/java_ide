@@ -37,7 +37,7 @@ Or else, you can run the IDE using:
 ./gradlew run
 ```
 6. The code is optimized to run as an executable, and so it expects to have jdk to run gradle and the language server. 
-To let the code function fully, copy your jdk to the root directory and rename it to **dont_snoop**.
+To let the code function fully, copy your jdk to the root directory and rename it to `dont_snoop`.
 ## Download
 Alternatively, you can download a setup if you wish to use the application.
 1. **Visit the Releases Page**: Go to the [Releases](https://github.com/your-username/your-repo/releases) page of this repository.
@@ -47,9 +47,36 @@ Alternatively, you can download a setup if you wish to use the application.
 3. **Download the Executable**:
    - Click on the release version you want to download.
    - Under the "Assets" section, you will find the downloadable files. Click on the file (e.g., `your-software-v1.0.0.exe`) to start the download.
+
+4. **Run the setup**:
+   - Double-click on the executable and follow the steps.
+   - Once it is done, if you don't have a java installation already
+   - Add the folder that will be in the installation folder named `dont_snoop`.
+
+5. **Adding to PATH (Optional)**:
+   1. Open the System Properties:
+      - Press Win + X and select System.
+      - Click on Advanced system settings on the left.
+      - In the System Properties window, click the Environment Variables button.
+   2. Edit the PATH Variable:
+      - In the Environment Variables window, locate the System variables section.
+      - Scroll down and select the Path variable, then click Edit.
+   3. Add a New Path Entry:
+      - In the Edit Environment Variable window, click New and `'path-to-fusion'\dont_snoop\bin`.
+      - Click OK to close the Edit Environment Variable window.
+   4. Apply Changes:
+      - Click OK to close the Environment Variables window.
+      - Click OK again to close the System Properties window.
+   5. Verify the Change:
+      - Open a new Command Prompt and run:
+   ```bash
+   echo %PATH%
+   ```
+      - Verify that your new path entry is listed.
+
 ## Usage/Examples
 
-- When you start the application, it will index all possible classes in the background. This will take some minutes but wont halt the application.
+- When you start the application, it will index all possible classes in the background. This will take some minutes but won't halt the application.
 
 - Use the menus to interact with different components such as creating files, projects etc.
 ![Screenshot](images/Fusion%20IDE%202024-08-20%206_56_27%20PM.png)
