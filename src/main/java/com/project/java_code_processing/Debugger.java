@@ -20,14 +20,7 @@ package com.project.java_code_processing;
 import com.project.custom_classes.BreakPoint;
 import com.project.managers.EditAreaManager;
 import com.project.managers.FileManager;
-import com.sun.jdi.VirtualMachine;
-import com.sun.jdi.ThreadReference;
-import com.sun.jdi.VirtualMachineManager;
-import com.sun.jdi.ReferenceType;
-import com.sun.jdi.Bootstrap;
-import com.sun.jdi.StackFrame;
-import com.sun.jdi.LocalVariable;
-import com.sun.jdi.Location;
+import com.sun.jdi.*;
 import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.connect.Connector;
 import com.sun.jdi.event.BreakpointEvent;
@@ -165,21 +158,24 @@ public class Debugger {
                 // Start debugging.
                 queue = vm.eventQueue();
                 debug();
-
+            } catch (Exception e) {
+                logger.error(e.getMessage());
+            } finally {
                 // Clean up
-                vm.dispose();
+                if (vm != null) {
+                    try {
+                        vm.dispose();
+                    } catch (VMDisconnectedException ignored) {}
+                }
 
                 // Clear the variableArea and remove highlightings.
                 Platform.runLater(() -> {
                     ((VBox) variableArea.getContent()).getChildren().clear();
                     EditAreaManager.clearDebugCanvases();
-                    System.out.println("LMAO");
                 });
 
                 // Indicate that debugging is done.
                 hasFinished = true;
-            } catch (Exception e) {
-                logger.error(e.getMessage());
             }
         }).start();
 
