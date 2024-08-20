@@ -1,0 +1,89 @@
+<configuration>
+
+    <!-- Console Appender -->
+    <appender name="ConsoleLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/main.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appenders -->
+
+    <appender name="JavaEditorFileLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/javaEditor.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="GradleFileLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/gradle.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="CustomClassesFileLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/custom_classes.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="JavaCodeProcessingFileLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/java_code_processing.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="ManagersFileLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/managers.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="UtilityFileLogger" class="ch.qos.logback.core.FileAppender">
+        <file>logs/utility.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Root Logger -->
+    <logger name="ch.qos.logback" level="warn" />
+
+    <!-- Custom Loggers -->
+
+    <logger name="com.project.javaeditor" level="debug">
+        <appender-ref ref="ConsoleLogger"/>
+        <appender-ref ref="JavaEditorFileLogger"/>
+    </logger>
+
+    <logger name="com.project.utility.ProjectWatcher" level="debug">
+        <appender-ref ref="ProjectWatcherFileLogger"/>
+    </logger>
+
+    <logger name="com.project.gradle" level="debug">
+        <appender-ref ref="GradleFileLogger"/>
+    </logger>
+
+    <logger name="com.project.custom_classes" level="debug">
+        <appender-ref ref="CustomClassesFileLogger"/>
+    </logger>
+
+    <logger name="com.project.java_code_processing" level="debug">
+        <appender-ref ref="JavaCodeProcessingFileLogger"/>
+    </logger>
+
+    <logger name="com.project.managers" level="debug">
+        <appender-ref ref="ManagersFileLogger"/>
+    </logger>
+
+    <logger name="com.project.utility" level="debug">
+        <appender-ref ref="UtilityFileLogger"/>
+    </logger>
+
+</configuration>
