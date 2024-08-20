@@ -6,31 +6,6 @@ This product includes software developed by Alexis Mugisha (https://github.com/C
 
 This product includes code from the following projects:
 
-- Apache Log4j API: Licensed under the Apache License, Version 2.0
-    Copyright 1999-2024 The Apache Software Foundation
-    - License:
-        Please refer to: http://www.apache.org/licenses/
-    - Notice:
-        Apache Log4j API
-        Copyright 1999-2024 The Apache Software Foundation
-
-        This product includes software developed at
-        The Apache Software Foundation (http://www.apache.org/).
-
-- Apache Log4j Core: Licensed under the Apache License, Version 2.0
-    Copyright 1999-2012 Apache Software Foundation
-    - License:
-            Please refer to: http://www.apache.org/licenses/
-    - Notice:
-        Apache Log4j Core
-        Copyright 1999-2012 Apache Software Foundation
-
-        This product includes software developed at
-        The Apache Software Foundation (http://www.apache.org/).
-
-        ResolverUtil.java
-        Copyright 2005-2006 Tim Fennell
-
 - ApiGuardian: Licensed under the Apache License, Version 2.0
 
 - ControlsFX: Licensed under the BSD 3-Clause License
@@ -64,10 +39,30 @@ This product includes code from the following projects:
     - License:
         Please refer to: https://github.com/openjdk/jfx/blob/master/LICENSE
 
+- Amazon Corretto 17: Licensed under the GNU General Public License v2.0 with Classpath Exception
+    Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+    59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+    - License:
+        Please refer to: https://openjdk.org/legal/gplv2+ce.html
+
 - ReactFX:  Licensed under the BSD 2-Clause "Simplified" License
     Copyright (c) 2013-2014, Tomas Mikula
     - License:
         Please refer to: https://github.com/TomasMikula/ReactFX/blob/master/LICENSE
+
+- The slf4j API: Licensed under the MIT License
+    Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)
+    - License:
+        Please refer to: https://github.com/qos-ch/slf4j/blob/master/LICENSE.txt
+
+- SQLite JDBC library: Licensed under the Apache License, Version 2.0
+    - License:
+        Please refer to: http://www.apache.org/licenses/
+    - Notice:
+        This product includes the following softwares developed by David Crawshaw.
+        See LICENSE.zentus file.
+
+        And also, NestedVM (Apache License Version 2.0) is used inside sqlite-
 
 - Eclipse JDT Language Server: Licensed under the Eclipse Public License - v 2.0
     - License:
