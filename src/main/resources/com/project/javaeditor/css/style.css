@@ -206,3 +206,14 @@
 .default {
     -fx-fill: #f0f0f0;
 }
+
+.import-class {
+    -fx-text-fill: #f0f0f0;
+    -fx-underline: true;
+    -fx-font-size: 11px;
+    -fx-padding: 4px;
+}
+
+.import-class:hover {
+    -fx-text-fill: #2b78b3;
+}
