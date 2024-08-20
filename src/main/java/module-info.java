@@ -22,12 +22,14 @@ module com.project.javaeditor {
     requires org.fxmisc.richtext;
 
     requires java.compiler;
-    requires org.apache.logging.log4j.core;
     requires org.eclipse.lsp4j;
     requires org.eclipse.lsp4j.jsonrpc;
     requires com.google.gson;
     requires org.fxmisc.undo;
     requires jdk.jdi;
+    requires org.slf4j;
+    requires com.github.javaparser.core;
+    requires java.sql;
 
     opens com.project.javaeditor to javafx.fxml;
     opens com.project.utility to com.google.gson;
