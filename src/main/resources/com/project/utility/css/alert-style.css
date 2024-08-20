@@ -13,10 +13,23 @@
     -fx-font-weight: bold;
 }
 
+.dialog-pane .button-bar .button:focused {
+    -fx-border-color: #e0d055;
+    -fx-border-width: 1px;
+}
+
 .dialog-pane .button-bar .button:hover {
     -fx-background-color: #e0d055;
 }
 
 .dialog-pane .label {
     -fx-text-fill: white;
+}
+
+.popup-label {
+    -fx-background-color: #744585;
+    -fx-border-width: 1px;
+    -fx-border-color: #f0f0f0;
+    -fx-padding: 20px;
+    -fx-text-fill: #f0f0f0;
 }
