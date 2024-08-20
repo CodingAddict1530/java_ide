@@ -740,15 +740,15 @@ public class FileManager {
                 if (path.toFile().getParentFile().mkdirs()) {
                     logger.info("Parent directory created for {}", path.toFile().getName());
                 } else {
-                    logger.error("Couldn't create parent directories for {}", path.toString());
+                    logger.error("Couldn't create parent directories for {}", path);
                 }
             }
             if (append) {
                 Files.write(path, List.of(content), StandardOpenOption.APPEND);
-                logger.info("Appended to {}", path.toString());
+                logger.info("Appended to {}", path);
             } else {
                 Files.write(path, List.of(content));
-                logger.info("Wrote to {}", path.toString());
+                logger.info("Wrote to {}", path);
             }
         } catch (IOException e) {
             logger.error(e.getMessage());

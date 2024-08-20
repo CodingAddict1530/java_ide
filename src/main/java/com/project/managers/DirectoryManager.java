@@ -113,11 +113,6 @@ public class DirectoryManager {
     private static ArrayList<Boolean> shouldCut;
 
     /**
-     * The file used for caching classes that take time to locate.
-     */
-    private static final File CACHE = new File("/src/main/files/cache.fus");
-
-    /**
      * Opens an existing project.
      *
      * @param path The Path to the root directory
@@ -177,7 +172,7 @@ public class DirectoryManager {
     public static RootTreeNode parseDirectory(Path path) {
 
         if (!Files.exists(path) || !Files.isDirectory(path)) {
-            logger.error("Couldn't open directory: {}", path.toString());
+            logger.error("Couldn't open directory: {}", path);
             return null;
         }
 

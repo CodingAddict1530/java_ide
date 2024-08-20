@@ -281,7 +281,7 @@ public class ProjectWatcher {
     /**
      * Periodically checks for new declared classes and inner classes and adds them to the database.
      *
-     * @param startDir
+     * @param startDir The directory where all source files are.
      */
     public static void watchClassPath(Path startDir) {
 
@@ -315,7 +315,7 @@ public class ProjectWatcher {
                 try {
                     Connection finalConn = conn;
                     Connection finalConn1 = conn;
-                    Files.walkFileTree(startDir, new SimpleFileVisitor<Path>() {
+                    Files.walkFileTree(startDir, new SimpleFileVisitor<>() {
                         @Override
                         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                             if (file.toString().endsWith(".java")) {
@@ -355,7 +355,7 @@ public class ProjectWatcher {
                                                                     packageName, innerClass.getNameAsString(), (packageName.isEmpty()) ? className + "$" + innerClass.getNameAsString() : packageName + "." + className + "$" + innerClass.getNameAsString(), file.toAbsolutePath().toString()
                                                             );
                                                         }
-                                                    }catch (SQLException e) {
+                                                    } catch (SQLException e) {
                                                         logger.error(e.getMessage());
                                                     }
                                                     MainUtility.addInnerClassMetaData(packageName, innerClass, className, file, finalConn);
