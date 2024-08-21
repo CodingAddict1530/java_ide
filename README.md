@@ -15,7 +15,7 @@ Built with JavaFX and Gradle.
 2. Navigate to the project:
 
 ```bash
-  cd my-project
+  cd java_ide
 ```
 3. Ensure you have gradle installed:
 - You need JDK 17 or later. Install it from [Oracle's website](https://www.oracle.com/java/technologies/downloads/?er=221886) or use a distribution like [Amazon Corretto](https://docs.aws.amazon.com/corretto/).
