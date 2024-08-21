@@ -68,8 +68,6 @@ public class ApplicationModel {
         // Import Java source code if not already imported.
         Thread srcFileSetUpThread = new Thread(MainUtility::importSrcFiles);
         srcFileSetUpThread.setDaemon(true);
-        // Set low priority to avoid it from taking too much CPU.
-        srcFileSetUpThread.setPriority(1);
         srcFileSetUpThread.start();
 
         MainUtility.checkAndFix();
