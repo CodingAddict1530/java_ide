@@ -25,6 +25,10 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import org.slf4j.Logger;
@@ -67,6 +71,15 @@ public class ApplicationView {
             stage.setScene(scene);
             stage.setMaximized(true);
             stage.getIcons().add(new Image(Objects.requireNonNull(application.getResource("icons/icon.png")).toExternalForm()));
+            stage.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+                if (new KeyCodeCombination(KeyCode.F4, KeyCombination.ALT_DOWN).match(event)) {
+                    event.consume();
+                    if (MainUtility.confirm("Application about to close!", "Are you sure you want to exit?")) {
+                        checkForUnsavedFiles();
+                        stage.close();
+                    }
+                }
+            });
             ApplicationModel.setUp(fxmlLoader);
             return fxmlLoader.getController();
         } catch (IOException e) {
