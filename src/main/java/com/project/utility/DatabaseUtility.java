@@ -25,6 +25,7 @@ import java.sql.PreparedStatement;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 
 /**
  * Handles Database related operations.
@@ -41,6 +42,8 @@ public class DatabaseUtility {
      */
     private static final String URL = "jdbc:sqlite:fusion.db";
 
+    private static final ArrayList<Connection> connections = new ArrayList<>();
+
     /**
      * Creates a connection to the database.
      *
@@ -50,7 +53,9 @@ public class DatabaseUtility {
 
         try {
             logger.info("Connected to database");
-            return DriverManager.getConnection(URL);
+            Connection c = DriverManager.getConnection(URL);
+            connections.add(c);
+            return c;
         } catch (SQLException e) {
             logger.error(e.getMessage());
             return null;
@@ -91,9 +96,8 @@ public class DatabaseUtility {
      * @param conn The database connection.
      * @param query The query. (In Prepared statement form).
      * @param params The parameters for the prepared statement.
-     * @return A ResultSet.
      */
-    public static int executeUpdate(Connection conn, String query, Object... params) {
+    public static void executeUpdate(Connection conn, String query, Object... params) {
 
         // Make sure the table exists.
         createCMDTable(conn);
@@ -101,10 +105,9 @@ public class DatabaseUtility {
             for (int i = 0; i < params.length; i++) {
                 ps.setObject(i + 1, params[i]);
             }
-            return ps.executeUpdate();
+            ps.executeUpdate();
         } catch (SQLException e) {
             logger.error(e.getMessage());
-            return -1;
         }
 
     }
@@ -142,6 +145,17 @@ public class DatabaseUtility {
             }
         } catch (SQLException e) {
             logger.error(e.getMessage());
+        }
+
+    }
+
+    /**
+     * Closes all connections to the database.
+     */
+    public static void closeAll() {
+
+        for (Connection conn : connections) {
+            close(conn);
         }
 
     }

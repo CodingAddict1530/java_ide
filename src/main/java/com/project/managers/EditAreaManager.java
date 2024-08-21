@@ -747,20 +747,31 @@ public class EditAreaManager {
 
                 // Find the source file.
                 Connection conn = DatabaseUtility.connect();
-                try (ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT qualifiedName, path FROM ClassMetaData " +
-                        "WHERE className = ?", diagnostic.getMessage().split(" ")[0])) {
+                ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT qualifiedName, path FROM ClassMetaData " +
+                        "WHERE className = ?", diagnostic.getMessage().split(" ")[0]);
+                try {
                     while (rs.next()) {
 
-                        // Remove the entry if the file no longer exists.
-                        if (!Paths.get(rs.getString("path")).toFile().exists()) {
+                        try {
+                            // Remove the entry if the file no longer exists.
+                            if (rs.getString("path").isEmpty() || !Paths.get(rs.getString("path")).toFile().exists()) {
+                                DatabaseUtility.executeUpdate(conn, "DELETE FROM ClassMetaData WHERE className = ? AND path = ?", diagnostic.getMessage().split(" ")[0], rs.getString("path"));
+                                continue;
+                            }
+                            packageNames.add(rs.getString("qualifiedName").replace('$', '.'));
+                        } catch (InvalidPathException ignored) {
                             DatabaseUtility.executeUpdate(conn, "DELETE FROM ClassMetaData WHERE className = ? AND path = ?", diagnostic.getMessage().split(" ")[0], rs.getString("path"));
-                            continue;
                         }
-                        packageNames.add(rs.getString("qualifiedName").replace('$', '.'));
+
                     }
                 } catch (SQLException e) {
                     logger.error(e.getMessage());
                 } finally {
+                    try {
+                        rs.getStatement().close();
+                    } catch (SQLException e) {
+                        logger.error(e.getMessage());
+                    }
                     DatabaseUtility.close(conn);
                 }
 
@@ -991,9 +1002,11 @@ public class EditAreaManager {
             logger.error("Could not connect to database");
             return false;
         }
-        try (ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT path FROM ClassMetaData " +
-                "WHERE qualifiedName = ? LIMIT 1", className)) {
+        ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT path FROM ClassMetaData " +
+                "WHERE qualifiedName = ? LIMIT 1", className);
+        try {
             path = Paths.get(rs.getString("path"));
+            rs.getStatement().close();
 
             // Remove entry if the file no longer exists.
             if (!path.toFile().exists()) {
@@ -1006,6 +1019,11 @@ public class EditAreaManager {
             path = null;
             logger.error(e.getMessage());
         } finally {
+            try {
+                rs.getStatement().close();
+            } catch (SQLException e) {
+                logger.error(e.getMessage());
+            }
             DatabaseUtility.close(conn);
         }
         if (path == null) {

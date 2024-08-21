@@ -330,9 +330,9 @@ public class ProjectWatcher {
                                         ResultSet rs = DatabaseUtility.executeQuery(finalConn, "SELECT id FROM ClassMetaData " +
                                                 "WHERE path = ?", file.toAbsolutePath().toString());
                                         try {
-
                                             // If not add it.
                                             if (!rs.next()) {
+                                                rs.getStatement().close();
                                                 DatabaseUtility.executeUpdate(finalConn,
                                                         "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
                                                                 "VALUES (?, ?, ?, ?)",
@@ -345,9 +345,11 @@ public class ProjectWatcher {
                                                 if (member instanceof TypeDeclaration<?> innerClass) {
 
                                                     // Check whether that class doesn't exist in the database.
-                                                    try (ResultSet rs2 = DatabaseUtility.executeQuery(finalConn1, "SELECT id FROM ClassMetaData " +
-                                                            "WHERE className = ? AND path = ?", innerClass.getNameAsString(), file.toAbsolutePath().toString())) {
+                                                    ResultSet rs2 = DatabaseUtility.executeQuery(finalConn1, "SELECT id FROM ClassMetaData " +
+                                                            "WHERE className = ? AND path = ?", innerClass.getNameAsString(), file.toAbsolutePath().toString());
+                                                    try {
                                                         if (!rs2.next()) {
+                                                            rs2.getStatement().close();
                                                             DatabaseUtility.executeUpdate(
                                                                     finalConn1,
                                                                     "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
@@ -357,12 +359,24 @@ public class ProjectWatcher {
                                                         }
                                                     } catch (SQLException e) {
                                                         logger.error(e.getMessage());
+                                                    } finally {
+                                                        try {
+                                                            rs2.getStatement().close();
+                                                        } catch (SQLException e) {
+                                                            logger.error(e.getMessage());
+                                                        }
                                                     }
                                                     MainUtility.addInnerClassMetaData(packageName, innerClass, className, file, finalConn);
                                                 }
                                             });
                                         } catch (SQLException e) {
                                             logger.error(e.getMessage());
+                                        } finally {
+                                            try {
+                                                rs.getStatement().close();
+                                            } catch (SQLException e) {
+                                                logger.error(e.getMessage());
+                                            }
                                         }
                                     }
                                 }

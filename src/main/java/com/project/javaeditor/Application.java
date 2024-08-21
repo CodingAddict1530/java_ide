@@ -18,6 +18,7 @@
 package com.project.javaeditor;
 
 import com.project.managers.JLSManager;
+import com.project.utility.DatabaseUtility;
 import com.project.utility.MainUtility;
 import com.project.utility.ProjectWatcher;
 import javafx.application.Platform;
@@ -131,6 +132,9 @@ public class Application extends javafx.application.Application {
 
         // Stop thread that checks the current file path.
         controller.stopFilePathThread();
+
+        // Close any open database connection.
+        DatabaseUtility.closeAll();
 
         // Stop WatchService.
         ProjectWatcher.stopWatching();

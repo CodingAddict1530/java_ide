@@ -53,6 +53,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.net.ServerSocket;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
@@ -77,6 +78,8 @@ public class MainUtility {
      * The logger for the class.
      */
     private static final Logger logger = LoggerFactory.getLogger(MainUtility.class);
+
+    private static final Path TEMP = Paths.get("files/temp.fus").toAbsolutePath();
 
     /**
      * An ArrayList containing the Path to the open project.
@@ -343,10 +346,9 @@ public class MainUtility {
                 }
             }
         }
-        Path destination = Paths.get("files/src");
 
         // Extract the source files.
-        extractZip(src.toPath(), destination, false);
+        extractZip(src.toPath(), Paths.get("files/src"), false);
 
     }
 
@@ -359,36 +361,64 @@ public class MainUtility {
      */
     public static void extractZip(Path zipFile, Path destination, boolean overwrite) {
 
-        // Check if destination directory already exists.
-        if (Files.exists(destination)) {
-            if (overwrite) {
-                try {
-
-                    // Delete the directory and its contents.
-                    DirectoryManager.recursiveDelete(destination);
-                } catch (Exception e) {
-                    logger.error(e.getMessage());
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
-
         // Open a database connection.
         Connection conn = DatabaseUtility.connect();
 
-        // Drop to the table to create a new one.
-        DatabaseUtility.executeUpdate(conn, "DROP TABLE IF EXISTS ClassMetaData");
+        boolean start = true;
+        if (TEMP.toFile().exists()) {
+            start = false;
+        } else {
+
+            // Check if destination directory already exists.
+            if (Files.exists(destination)) {
+                if (overwrite) {
+                    try {
+
+                        // Delete the directory and its contents.
+                        DirectoryManager.recursiveDelete(destination);
+                    } catch (Exception e) {
+                        logger.error(e.getMessage());
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+
+            // Create Temp file to indicate indexing is in progress.
+            FileManager.writeToFile(TEMP, "", true, false);
+
+            // Drop to the table to create a new one.
+            DatabaseUtility.executeUpdate(conn, "DROP TABLE IF EXISTS ClassMetaData");
+        }
 
         // Create the destination directory.
-        if (destination.toFile().mkdirs()) {
+        if (destination.toFile().exists() || destination.toFile().mkdirs()) {
             try (InputStream in = new FileInputStream(zipFile.toFile());
                  ZipInputStream zin = new ZipInputStream(in)) {
 
                 ZipEntry entry;
+                logger.info("Started Indexing");
+                Path lastEntry = null;
+                if (!start) {
+                    ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT path FROM ClassMetaData ORDER BY id DESC LIMIT 1");
+                    lastEntry = Paths.get(rs.getString("path"));
+                    rs.getStatement().close();
+                }
                 while ((entry = zin.getNextEntry()) != null) {
                     Path entryPath = destination.resolve(entry.getName());
+                    if (!start) {
+                        if (entryPath.toAbsolutePath().equals(lastEntry)) {
+                            start = true;
+                        }
+                        continue;
+                    }
+                    if (entryPath.toFile().exists() && !entryPath.toFile().isDirectory()) {
+
+                        // Add class meta data to the database.
+                        addClassMetaData(entryPath, conn);
+                        continue;
+                    }
                     if (entry.isDirectory()) {
                         Files.createDirectories(entryPath);
                     } else {
@@ -419,11 +449,24 @@ public class MainUtility {
                     }
                     zin.closeEntry();
                 }
+                logger.info("Ended Indexing");
             } catch (Exception e) {
                 logger.error(e.getMessage());
             }
         } else {
             logger.error("{} directory could not be created", destination);
+        }
+
+        try {
+
+            // An open connection would mean the Thread actually got to the end of the zip.
+            if (conn != null && !conn.isClosed()) {
+
+                // Delete temp.fus to mark that indexing is complete.
+                FileManager.deleteFile(TEMP, true, true);
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
         }
 
         // Close the database connection.
@@ -546,10 +589,13 @@ public class MainUtility {
                     type.getMembers().forEach(member -> {
                         if (member instanceof TypeDeclaration<?> innerClass) {
 
+
                             // Check whether that class doesn't exist in the database.
-                            try (ResultSet rs2 = DatabaseUtility.executeQuery(conn, "SELECT id FROM ClassMetaData " +
-                                    "WHERE className = ? AND path = ?", innerClass.getNameAsString(), path.toAbsolutePath().toString())) {
+                            ResultSet rs2 = DatabaseUtility.executeQuery(conn, "SELECT id FROM ClassMetaData " +
+                                    "WHERE className = ? AND path = ?", innerClass.getNameAsString(), path.toAbsolutePath().toString());
+                            try {
                                 if (!rs2.next()) {
+                                    rs2.getStatement().close();
                                     DatabaseUtility.executeUpdate(
                                             conn,
                                             "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
@@ -559,6 +605,12 @@ public class MainUtility {
                                 }
                             }catch (SQLException e) {
                                 logger.error(e.getMessage());
+                            } finally {
+                                try {
+                                    rs2.getStatement().close();
+                                } catch (SQLException e) {
+                                    logger.error(e.getMessage());
+                                }
                             }
                             addInnerClassMetaData(packageName, innerClass, className, path, conn);
                         }
@@ -586,9 +638,11 @@ public class MainUtility {
                 String innerClassName = innerClass.getNameAsString();
 
                 // Check whether that class doesn't exist in the database.
-                try (ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT id FROM ClassMetaData " +
-                        "WHERE className = ? AND path = ?", innerClassName, path.toAbsolutePath().toString())) {
+                ResultSet rs = DatabaseUtility.executeQuery(conn, "SELECT id FROM ClassMetaData " +
+                        "WHERE className = ? AND path = ?", innerClassName, path.toAbsolutePath().toString());
+                try {
                     if (!rs.next()) {
+                        rs.getStatement().close();
                         DatabaseUtility.executeUpdate(
                                 conn,
                                 "INSERT INTO ClassMetaData(packageName, className, qualifiedName, path)" +
@@ -596,8 +650,14 @@ public class MainUtility {
                                 packageName, innerClassName, (packageName.isEmpty()) ? outerClassName + "$" + innerClassName : packageName + "." + outerClassName + "$" + innerClassName, path.toAbsolutePath().toString()
                         );
                     }
-                }catch (SQLException e) {
+                } catch (SQLException e) {
                     logger.error(e.getMessage());
+                } finally {
+                    try {
+                        rs.getStatement().close();
+                    } catch (SQLException e) {
+                        logger.error(e.getMessage());
+                    }
                 }
 
                 // Recursively handle nested inner classes
