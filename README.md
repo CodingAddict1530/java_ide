@@ -39,19 +39,20 @@ Or else, you can run the IDE using:
 6. The code is optimized to run as an executable, and so it expects to have jdk to run gradle and the language server. 
 To let the code function fully, copy your jdk to the root directory and rename it to `dont_snoop`.
 ## Download
-Alternatively, you can download a setup if you wish to use the application.
-1. **Visit the Releases Page**: Go to the [Releases](https://github.com/your-username/your-repo/releases) page of this repository.
+Alternatively, you can download a setup (or jar) if you wish to use the application.
+1. **Visit the Releases Page**: Go to the [Releases](https://github.com/CodingAddict1530/java_ide/releases/) page of this repository.
    
 2. **Find the Latest Release**: Look for the most recent release, which is tagged with the latest version number (e.g., `v1.0.0`).
 
 3. **Download the Executable**:
    - Click on the release version you want to download.
-   - Under the "Assets" section, you will find the downloadable files. Click on the file (e.g., `your-software-v1.0.0.exe`) to start the download.
+   - Under the "Assets" section, you will find the downloadable files. Click on the file to start the download.
 
 4. **Run the setup**:
    - Double-click on the executable and follow the steps.
    - Once it is done, if you don't have a java installation already
    - Add the folder that will be in the installation folder named `dont_snoop`.
+   - For the jar, go to bin and double click JavaEditor.bat for Windows, or JavaEditor for others.
 
 5. **Adding to PATH (Optional)**:
    1. Open the System Properties:
@@ -62,7 +63,8 @@ Alternatively, you can download a setup if you wish to use the application.
       - In the Environment Variables window, locate the System variables section.
       - Scroll down and select the Path variable, then click Edit.
    3. Add a New Path Entry:
-      - In the Edit Environment Variable window, click New and `'path-to-fusion'\dont_snoop\bin`.
+      - In the Edit Environment Variable window, click New and `'path-to-fusion'\dont_snoop\bin` for the exe.
+      - Or `'path-to-fusion'\bin\dont_snoop\bin` for the exe
       - Click OK to close the Edit Environment Variable window.
    4. Apply Changes:
       - Click OK to close the Environment Variables window.
