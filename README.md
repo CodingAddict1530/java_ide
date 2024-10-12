@@ -103,28 +103,6 @@ Alternatively, you can download a setup (or jar) if you wish to use the applicat
 - Debugging features such as single stepping.
 - Terminal (COMING SOON...).
 
-
-## Contributing
-
-Contributions are always welcome!
-
-1. **Fork the Repository**: Click on the "Fork" button at the top right of the repository page.
-2. **Create a Feature Branch**:
-```bash
-git checkout -b feature/YourFeatureName
-```
-3. **Make Your Changes**: Implement the new feature or fix the issue.
-4. **Commit Your Changes**:
-```bash
-git commit -am 'Add some feature'
-```
-5. **Push to the Branch**:
-```bash
-git push origin feature/YourFeatureName
-```
-6. **Create a Pull Request**: Go to the repository on GitHub and create a pull request from your feature branch to the `master` branch.
-
-
 ## License
 
 [APACHE LICENSE 2.0](https://www.apache.org/licenses/LICENSE-2.0)
